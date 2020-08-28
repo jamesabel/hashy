@@ -1,0 +1,2 @@
+# hashy
+another hash library
