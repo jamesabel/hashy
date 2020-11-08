@@ -63,6 +63,7 @@ def dls_sort(orig: (dict, list, set)) -> (dict, list):
 def _dls_hash(dl: (dict, list, set), string_hash_function: typing.Callable) -> str:
     """
     Given a possibly unordered nested dictionary, set or list, return a consistent hash of it.
+    These hashes are specific to hashy (as opposed to the other hashy functions like string or file which will have a more conventional value).
     :param dl: dict or list
     :return: hash string corresponding to the dl input
     """
