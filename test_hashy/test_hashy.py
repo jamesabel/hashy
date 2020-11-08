@@ -20,4 +20,3 @@ def test_string():
     assert get_string_md5(s) == a_md5
     assert get_string_sha256(s) == a_sha256
     assert get_string_sha512(s) == a_sha512
-

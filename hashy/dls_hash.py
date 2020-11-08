@@ -1,6 +1,5 @@
 import copy
 import collections
-import json
 import typing
 
 from hashy import get_string_md5, get_string_sha256, get_string_sha512
