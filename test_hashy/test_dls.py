@@ -1,7 +1,7 @@
 from collections import OrderedDict
 from enum import Enum
 import json
-from pprint import pprint
+from decimal import Decimal
 
 from hashy import dls_sort, get_dls_md5, get_dls_sha256, get_dls_sha512, json_dumps
 
@@ -40,6 +40,12 @@ def test_enum():
     assert json_dumps(dls_sort(enum_example)) == '{"a":"a","b":"b"}'  # sorted and test that we're using the .name (not the .value) of the Enum
 
     assert get_dls_md5(enum_example) == "e3f5105b86f8bca747510d72bcaa131b"
+
+
+def test_decimal():
+    # doesn't work well for numbers not representable in float point, but integers and some floating point are OK
+    d = {"i": Decimal(2), "f": Decimal(1.5)}
+    assert json_dumps(dls_sort(d)) == '{"f":1.5,"i":2}'
 
 
 def test_set_sort():
