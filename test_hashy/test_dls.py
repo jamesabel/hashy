@@ -1,7 +1,9 @@
 from collections import OrderedDict
+from enum import Enum
 import json
+from pprint import pprint
 
-from hashy import dls_sort, get_dls_md5, get_dls_sha256, get_dls_sha512
+from hashy import dls_sort, get_dls_md5, get_dls_sha256, get_dls_sha512, json_dumps
 
 
 def test_dl_sort():
@@ -26,6 +28,18 @@ def test_dl_sort():
 
     dict_hash_512 = get_dls_sha512(in_dict)
     assert dict_hash_512 == "a010a6ff0601b3e4cd33ffff6004718b5145302c24960904778bfedc4228521345c8936322ff267e49f321bdc404b3720492ace7434a4669d1896018fa55e285"
+
+
+def test_enum():
+
+    class MyEnum(Enum):
+        a = 1
+        b = 2
+    enum_example = {"b": MyEnum.b, "a": MyEnum.a}
+
+    assert json_dumps(dls_sort(enum_example)) == '{"a":"a","b":"b"}'  # sorted and test that we're using the .name (not the .value) of the Enum
+
+    assert get_dls_md5(enum_example) == "e3f5105b86f8bca747510d72bcaa131b"
 
 
 def test_set_sort():

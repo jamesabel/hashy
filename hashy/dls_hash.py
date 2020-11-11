@@ -11,7 +11,7 @@ from enum import Enum
 from decimal import Decimal
 
 
-def _convert_serializable_special_cases(o):
+def convert_serializable_special_cases(o):
 
     """
     Convert an object to a type that is fairly generally serializable (e.g. json serializable).
@@ -25,7 +25,7 @@ def _convert_serializable_special_cases(o):
     """
 
     if isinstance(o, Enum):
-        serializable_representation = o.value
+        serializable_representation = o.name
     elif isinstance(o, Decimal):
         # decimal.Decimal (e.g. in AWS DynamoDB), both integer and floating point
         if o % 1 == 0:
@@ -37,6 +37,11 @@ def _convert_serializable_special_cases(o):
     else:
         raise NotImplementedError(f"can not serialize {o} since type={type(o)}")
     return serializable_representation
+
+
+def json_dumps(o) -> str:
+    separators = (",", ":")  # no whitespace
+    return json.dumps(dls_sort(o), default=convert_serializable_special_cases, separators=separators)  # serialize the object (as json string)
 
 
 def dls_sort(orig: (dict, list, set)) -> (dict, list):
@@ -60,17 +65,15 @@ def dls_sort(orig: (dict, list, set)) -> (dict, list):
     return orig
 
 
-def _dls_hash(dl: (dict, list, set), string_hash_function: typing.Callable) -> str:
+def _dls_hash(dls: (dict, list, set), string_hash_function: typing.Callable) -> str:
     """
     Given a possibly unordered nested dictionary, set or list, return a consistent hash of it.
     These hashes are specific to hashy (as opposed to the other hashy functions like string or file which will have a more conventional value).
-    :param dl: dict or list
+    :param dls: dict or list
     :return: hash string corresponding to the dl input
     """
-    separators = (",", ":")  # no whitespace
-    sorted_dls_json = json.dumps(dls_sort(dl), default=_convert_serializable_special_cases, separators=separators)  # serialize the object (as json string)
-    hash_result = string_hash_function(sorted_dls_json)  # do a hash on the (consistent and repeatable) string
-    return hash_result
+
+    return string_hash_function(json_dumps(dls))  # do a hash on the (consistent and repeatable) string
 
 
 def get_dls_md5(dl: (dict, list, set)) -> str:
