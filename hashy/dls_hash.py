@@ -1,6 +1,6 @@
 import copy
 import collections
-from typing import Callable, Union
+from typing import Callable, Union, Any
 
 from hashy import get_string_md5, get_string_sha256, get_string_sha512
 
@@ -11,7 +11,7 @@ from enum import Enum
 from decimal import Decimal
 
 
-def convert_serializable_special_cases(o):
+def convert_serializable_special_cases(o) -> Union[str, int, float]:
 
     """
     Convert an object to a type that is fairly generally serializable (e.g. json serializable).
@@ -25,7 +25,7 @@ def convert_serializable_special_cases(o):
     """
 
     if isinstance(o, Enum):
-        serializable_representation = o.name
+        serializable_representation = o.name  # type: Union[str, int, float]
     elif isinstance(o, Decimal):
         # decimal.Decimal (e.g. in AWS DynamoDB), both integer and floating point
         if o % 1 == 0:
@@ -39,7 +39,7 @@ def convert_serializable_special_cases(o):
     return serializable_representation
 
 
-def json_dumps(o) -> str:
+def json_dumps(o: Any) -> str:
     separators = (",", ":")  # no whitespace
     return json.dumps(dls_sort(o), default=convert_serializable_special_cases, separators=separators)  # serialize the object (as json string)
 

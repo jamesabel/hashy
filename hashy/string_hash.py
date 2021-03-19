@@ -1,7 +1,8 @@
+from typing import Callable
 import hashlib
 
 
-def _get_string_hash(s: str, hash_function) -> str:
+def _get_string_hash(s: str, hash_function: Callable) -> str:
     hash_object = hash_function()
     hash_object.update(s.encode())
     hash_str = hash_object.hexdigest().lower()
