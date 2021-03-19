@@ -1,6 +1,6 @@
 import copy
 import collections
-import typing
+from typing import Callable, Union
 
 from hashy import get_string_md5, get_string_sha256, get_string_sha512
 
@@ -44,7 +44,7 @@ def json_dumps(o) -> str:
     return json.dumps(dls_sort(o), default=convert_serializable_special_cases, separators=separators)  # serialize the object (as json string)
 
 
-def dls_sort(orig: (dict, list, set)) -> (dict, list):
+def dls_sort(orig: Union[dict, list, set]) -> Union[dict, list]:
     """
     Given a nested dictionary, set or list, return a sorted version.  Note that lists aren't sorted (they merely retain
     their original order).  Original data is unchanged.
@@ -65,7 +65,7 @@ def dls_sort(orig: (dict, list, set)) -> (dict, list):
     return orig
 
 
-def _dls_hash(dls: (dict, list, set), string_hash_function: typing.Callable) -> str:
+def _dls_hash(dls: Union[dict, list, set], string_hash_function: Callable) -> str:
     """
     Given a possibly unordered nested dictionary, set or list, return a consistent hash of it.
     These hashes are specific to hashy (as opposed to the other hashy functions like string or file which will have a more conventional value).
@@ -76,7 +76,7 @@ def _dls_hash(dls: (dict, list, set), string_hash_function: typing.Callable) -> 
     return string_hash_function(json_dumps(dls))  # do a hash on the (consistent and repeatable) string
 
 
-def get_dls_md5(dl: (dict, list, set)) -> str:
+def get_dls_md5(dl: Union[dict, list, set]) -> str:
     """
     Given a possibly unordered nested dictionary, set or list, return a consistent hash of it.
     :param dl: dist or list
@@ -85,7 +85,7 @@ def get_dls_md5(dl: (dict, list, set)) -> str:
     return _dls_hash(dl, get_string_md5)
 
 
-def get_dls_sha256(dl: (dict, list, set)) -> str:
+def get_dls_sha256(dl: Union[dict, list, set]) -> str:
     """
     Given a possibly unordered nested dictionary, set or list, return a consistent hash of it.
     :param dl: dist or list
@@ -94,7 +94,7 @@ def get_dls_sha256(dl: (dict, list, set)) -> str:
     return _dls_hash(dl, get_string_sha256)
 
 
-def get_dls_sha512(dl: (dict, list, set)) -> str:
+def get_dls_sha512(dl: Union[dict, list, set]) -> str:
     """
     Given a possibly unordered nested dictionary, set or list, return a consistent hash of it.
     :param dl: dist or list
