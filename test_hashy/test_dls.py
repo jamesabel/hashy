@@ -31,10 +31,10 @@ def test_dl_sort():
 
 
 def test_enum():
-
     class MyEnum(Enum):
         a = 1
         b = 2
+
     enum_example = {"b": MyEnum.b, "a": MyEnum.a}
 
     assert json_dumps(dls_sort(enum_example)) == '{"a":"a","b":"b"}'  # sorted and test that we're using the .name (not the .value) of the Enum
