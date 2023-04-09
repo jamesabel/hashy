@@ -7,7 +7,6 @@ from hashy import dls_sort, get_dls_md5, get_dls_sha256, get_dls_sha512, json_du
 
 
 def test_dl_sort():
-
     in_dict = OrderedDict()
     in_dict["z"] = "y"
     # list order is maintained, but the items in the list should be ordered
