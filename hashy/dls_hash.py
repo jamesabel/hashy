@@ -1,5 +1,5 @@
 import copy
-import collections
+from collections import OrderedDict
 from typing import Callable, Union, Any
 
 from hashy import get_string_md5, get_string_sha256, get_string_sha512
@@ -12,7 +12,6 @@ from decimal import Decimal
 
 
 def convert_serializable_special_cases(o) -> Union[str, int, float]:
-
     """
     Convert an object to a type that is fairly generally serializable (e.g. json serializable).
     This only handles the cases that need converting.  The json module handles all the rest.
@@ -44,7 +43,7 @@ def json_dumps(o: Any) -> str:
     return json.dumps(dls_sort(o), default=convert_serializable_special_cases, separators=separators)  # serialize the object (as json string)
 
 
-def dls_sort(orig: Union[dict, list, set]) -> Union[dict, list]:
+def dls_sort(orig: Union[dict, OrderedDict, list, set]) -> Union[dict, OrderedDict, list]:
     """
     Given a nested dictionary, set or list, return a sorted version.  Note that lists aren't sorted (they merely retain
     their original order).  Original data is unchanged.
@@ -57,15 +56,15 @@ def dls_sort(orig: Union[dict, list, set]) -> Union[dict, list]:
     elif isinstance(orig, set):
         # have to sort sets to be consistent since they have no order
         return sorted(list(orig))
-    elif isinstance(orig, dict) or isinstance(orig, collections.OrderedDict):
-        sorted_dict = collections.OrderedDict()
+    elif isinstance(orig, dict) or isinstance(orig, OrderedDict):
+        sorted_dict = OrderedDict()
         for k in sorted(orig):
             sorted_dict[k] = dls_sort(orig[k])
         return sorted_dict
     return orig
 
 
-def _dls_hash(dls: Union[dict, list, set], string_hash_function: Callable) -> str:
+def _dls_hash(dls: Union[dict, OrderedDict, list, set], string_hash_function: Callable) -> str:
     """
     Given a possibly unordered nested dictionary, set or list, return a consistent hash of it.
     These hashes are specific to hashy (as opposed to the other hashy functions like string or file which will have a more conventional value).
@@ -76,7 +75,7 @@ def _dls_hash(dls: Union[dict, list, set], string_hash_function: Callable) -> st
     return string_hash_function(json_dumps(dls))  # do a hash on the (consistent and repeatable) string
 
 
-def get_dls_md5(dl: Union[dict, list, set]) -> str:
+def get_dls_md5(dl: Union[dict, OrderedDict, list, set]) -> str:
     """
     Given a possibly unordered nested dictionary, set or list, return a consistent hash of it.
     :param dl: dist or list
@@ -85,7 +84,7 @@ def get_dls_md5(dl: Union[dict, list, set]) -> str:
     return _dls_hash(dl, get_string_md5)
 
 
-def get_dls_sha256(dl: Union[dict, list, set]) -> str:
+def get_dls_sha256(dl: Union[dict, OrderedDict, list, set]) -> str:
     """
     Given a possibly unordered nested dictionary, set or list, return a consistent hash of it.
     :param dl: dist or list
@@ -94,7 +93,7 @@ def get_dls_sha256(dl: Union[dict, list, set]) -> str:
     return _dls_hash(dl, get_string_sha256)
 
 
-def get_dls_sha512(dl: Union[dict, list, set]) -> str:
+def get_dls_sha512(dl: Union[dict, OrderedDict, list, set]) -> str:
     """
     Given a possibly unordered nested dictionary, set or list, return a consistent hash of it.
     :param dl: dist or list
