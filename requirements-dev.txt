@@ -1,3 +1,6 @@
+# app
+appdirs
+# dev
 twine
 pytest
 wheel
@@ -6,3 +9,4 @@ pytest-cov
 black
 flake8
 mypy
+types-appdirs
