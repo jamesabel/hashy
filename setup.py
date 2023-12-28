@@ -23,6 +23,6 @@ setup(
     keywords=["hash"],
     packages=[__title__],
     package_data={__title__: [readme_file_path, "py.typed"]},
-    install_requires=[],
+    install_requires=["appdirs"],
     classifiers=[],
 )
