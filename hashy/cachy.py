@@ -31,12 +31,13 @@ def cachy(cache_life: timedelta, cache_dir: Path = get_cache_dir()) -> Callable:
         # Create a cache file path based on the function name
         cache_file_path = cache_directory / f"{func.__name__}_cache.pkl"
 
-        cache_file_mtime = datetime.fromtimestamp(os.path.getmtime(cache_file_path))
-        if datetime.now() - cache_file_mtime >= cache_life:
-            try:
-                cache_file_path.unlink(missing_ok=True)
-            except OSError:
-                ...
+        if cache_file_path.exists():
+            cache_file_mtime = datetime.fromtimestamp(os.path.getmtime(cache_file_path))
+            if datetime.now() - cache_file_mtime >= cache_life:
+                try:
+                    cache_file_path.unlink(missing_ok=True)
+                except OSError:
+                    ...
 
         # Load existing cache if file exists
         if cache_file_path.exists():

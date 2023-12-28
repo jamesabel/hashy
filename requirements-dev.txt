@@ -4,6 +4,7 @@ appdirs
 twine
 pytest
 wheel
+pytest-pycharm
 coverage
 pytest-cov
 black
