@@ -5,7 +5,7 @@ import os
 
 cache_life = timedelta(days=1)
 
-cache_directory = os.environ.get('RUNNER_TEMP', get_cache_dir())  # for GitHub actions
+cache_directory = os.environ.get("RUNNER_TEMP", get_cache_dir())  # for GitHub actions
 
 
 def test_a_cachy_zero_life():
