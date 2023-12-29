@@ -65,7 +65,7 @@ def cachy(cache_life: timedelta, cache_dir: Path = get_cache_dir()) -> Callable:
         cache: Dict[str, Any] = {}
 
         # Create a cache file path based on the function name
-        cache_file_path = cache_dir / f"{func.__name__}_cache.pkl"
+        cache_file_path = Path(cache_dir, f"{func.__name__}_cache.pkl")
 
         def load_cache(_cache: dict[str, Any]):
             global _cache_counters
