@@ -1,5 +1,5 @@
 import pickle
-from typing import Callable, Any, Dict, AnyStr
+from typing import Callable, Any, Dict
 from functools import wraps
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -62,12 +62,12 @@ def cachy(cache_life: timedelta, cache_dir: Path = get_cache_dir()) -> Callable:
     """
 
     def decorator(func: Callable) -> Callable:
-        cache: Dict[AnyStr, Any] = {}
+        cache: Dict[str, Any] = {}
 
         # Create a cache file path based on the function name
         cache_file_path = Path(cache_dir, f"{func.__name__}_cache.pkl")
 
-        def load_cache(_cache: Dict[AnyStr, Any]):
+        def load_cache(_cache: Dict[str, Any]):
             global _cache_counters
 
             # Delete the cache file if it has expired
