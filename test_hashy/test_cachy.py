@@ -9,7 +9,7 @@ from pprint import pformat
 
 cache_life = timedelta(days=1)
 
-cache_directory = os.environ.get("RUNNER_TEMP", Path("temp"))  # for GitHub actions
+cache_directory = Path(os.environ.get("RUNNER_TEMP", "temp"))  # for GitHub actions
 
 
 def rm_cache_dir():
