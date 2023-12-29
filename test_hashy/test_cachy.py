@@ -17,7 +17,6 @@ def rm_cache_dir():
 
 
 def test_a_cachy_zero_life():
-
     rm_cache_dir()
     clear_counters()
 
@@ -64,7 +63,6 @@ def test_cachy_dict():
 
 
 def test_cachy_performance():
-
     # test that cachy is actually caching
 
     rm_cache_dir()
