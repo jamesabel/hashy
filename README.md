@@ -16,7 +16,7 @@ disk. It is similar to `@functools.cache`, except:
 
 - Persistent (saved to local disk)
   - Optionally can be saved to a user-specified directory, otherwise it's the usual cache directory for the OS
-- User-specified cache life.
+- Optional user-specified cache life.
 - Doesn't require arguments be frozen and/or pickle-able. Uses hashy to create a hash of the arguments.
 
 
