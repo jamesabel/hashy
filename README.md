@@ -9,6 +9,17 @@ you can go to an online hash calculator for "a" and get the same hash as hashy g
 
 Hashes for complex data types like dict, list and set are specific to hashy.
 
+## cachy
+
+`hashy` also provides `cachy`, a decorator that can be used to persistently cache the results of a function to 
+disk. It is similar to `@functools.cache`, except:
+
+- Persistent (saved to local disk)
+  - Optionally can be saved to a user-specified directory, otherwise it's the usual cache directory for the OS
+- User-specified cache life.
+- Doesn't require arguments be frozen and/or pickle-able. Uses hashy to create a hash of the arguments.
+
+
 # Example
 
 ```

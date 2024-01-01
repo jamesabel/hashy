@@ -1,5 +1,5 @@
 import pickle
-from typing import Callable, Any, Dict
+from typing import Callable, Any, Dict, Union
 from functools import wraps
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -54,7 +54,7 @@ def get_cache_dir() -> Path:
     return cache_dir
 
 
-def cachy(cache_life: timedelta, cache_dir: Path = get_cache_dir()) -> Callable:
+def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache_dir()) -> Callable:
     """
     Decorator to persistently cache the results of a function call, with a cache life.
     :param cache_life: cache life
@@ -73,7 +73,7 @@ def cachy(cache_life: timedelta, cache_dir: Path = get_cache_dir()) -> Callable:
             # Delete the cache file if it has expired
             if cache_file_path.exists():
                 cache_file_mtime = datetime.fromtimestamp(os.path.getmtime(cache_file_path))
-                if datetime.now() - cache_file_mtime >= cache_life:
+                if cache_life is not None and datetime.now() - cache_file_mtime >= cache_life:
                     _cache_counters.cache_expired_counter += 1
                     try:
                         cache_file_path.unlink(missing_ok=True)

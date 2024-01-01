@@ -102,3 +102,41 @@ def test_cachy_complex():
 
 def test_get_cache_dir():
     assert isinstance(get_cache_dir(), Path)
+
+
+def test_cachy_dir_default_quick():
+    @cachy(timedelta(seconds=1))
+    def func(a):
+        return a + a
+
+    assert func(2) == 4
+    assert func(2) == 4
+
+
+def test_cachy_dir_default_slow():
+    @cachy(timedelta(days=1))
+    def func(a):
+        return a + a
+
+    assert func(2) == 4
+    assert func(2) == 4
+
+
+def test_cachy_all_defaults():
+
+    rm_cache_dir()
+    clear_counters()
+
+    @cachy(cache_dir=cache_directory)
+    def func(a):
+        time.sleep(0.1)
+        return a + a
+
+    time_a = time.time()
+    assert func(2) == 4
+    time_b = time.time()
+    assert func(2) == 4
+    time_c = time.time()
+    duration_a = time_b - time_a
+    duration_b = time_c - time_b
+    assert duration_a > 2 * duration_b
