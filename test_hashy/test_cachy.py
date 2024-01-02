@@ -1,11 +1,13 @@
 import time
 from pathlib import Path
 from datetime import timedelta
-from hashy import cachy
-from hashy.cachy import get_cache_dir, CacheCounters, clear_counters, get_counters
 import os
 import shutil
 from pprint import pformat
+from typing import List
+
+from hashy import cachy
+from hashy.cachy import get_cache_dir, CacheCounters, clear_counters, get_counters
 
 cache_life = timedelta(days=1)
 
@@ -160,11 +162,11 @@ def test_cachy_different_values():
 def test_cachy_big_data():
 
     @cachy(cache_life, cache_directory)
-    def big_to_little(a: list[int]) -> int:
+    def big_to_little(a: List[int]) -> int:
         return len(a)
 
     @cachy(cache_life, cache_directory)
-    def little_to_big(a: int) -> list[int]:
+    def little_to_big(a: int) -> List[int]:
         return [v for v in range(a)]
 
     rm_cache_dir()
