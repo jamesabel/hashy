@@ -24,11 +24,14 @@ disk. It is similar to `@functools.cache`, except:
 
 ```
 
-from hashy import get_string_sha256
+from hashy import get_string_sha256, cachy
 
-print(get_string_sha256("a"))
+print(get_string_sha256("a"))  # prints ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb
 
-# prints
-# ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb
+@cachy()
+def func(a):
+    return a + a
+
+print(func(2))  # prints 4
 
 ```
