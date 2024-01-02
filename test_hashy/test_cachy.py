@@ -140,3 +140,43 @@ def test_cachy_all_defaults():
     duration_a = time_b - time_a
     duration_b = time_c - time_b
     assert duration_a > 2 * duration_b
+
+
+def test_cachy_different_values():
+
+    rm_cache_dir()
+    clear_counters()
+
+    @cachy(cache_dir=cache_directory)
+    def func(a):
+        time.sleep(0.1)
+        return a + a
+
+    assert func(2) == 4
+    assert func(3) == 6
+    assert func(2) == 4
+
+
+def test_cachy_big_data():
+
+    @cachy(cache_life, cache_directory)
+    def big_to_little(a: list[int]) -> int:
+        return len(a)
+
+    @cachy(cache_life, cache_directory)
+    def little_to_big(a: int) -> list[int]:
+        return [v for v in range(a)]
+
+    rm_cache_dir()
+    clear_counters()
+    for n in (100, 1000):
+        data = [v for v in range(n)]
+
+        # bools since if there's a mis-compare the diff will be printed which takes a really long time
+        assert bool(big_to_little(data) == n)
+        assert bool(little_to_big(n) == data)
+        assert bool(little_to_big(n) == data)
+        assert bool(little_to_big(n) == data)
+        assert bool(big_to_little(data) == n)
+
+    assert get_counters() == CacheCounters(cache_hit_counter=6, cache_miss_counter=4, cache_load_counter=0, cache_expired_counter=0)
