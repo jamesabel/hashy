@@ -1,7 +1,7 @@
 __application_name__ = "hashy"
 __title__ = __application_name__
 __author__ = "abel"
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 __author_email__ = "j@abel.co"
 __url__ = "https://github.com/jamesabel/hashy"
 __download_url__ = "https://github.com/jamesabel/hashy"

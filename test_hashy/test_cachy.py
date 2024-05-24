@@ -7,7 +7,7 @@ from pprint import pformat
 from typing import List
 
 from hashy import cachy
-from hashy.cachy import get_cache_dir, CacheCounters, clear_counters, get_counters
+from hashy._cachy import get_cache_dir, CacheCounters, clear_counters, get_counters
 
 cache_life = timedelta(days=1)
 
