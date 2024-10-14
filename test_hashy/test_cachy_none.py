@@ -4,7 +4,7 @@ import os
 
 
 from hashy import cachy
-from hashy._cachy import clear_counters, get_counters, CacheCounters
+from hashy.cache import clear_counters, get_counters, CacheCounters
 
 cache_life = timedelta(days=1)
 
