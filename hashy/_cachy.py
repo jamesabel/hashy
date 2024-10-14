@@ -4,10 +4,13 @@ from functools import wraps
 from pathlib import Path
 from datetime import datetime, timedelta
 import os
+from logging import getLogger
 
 from appdirs import user_cache_dir
 
 from . import __application_name__, __author__, get_dls_sha512
+
+log = getLogger(__name__)
 
 
 # Global counters, handy for testing
@@ -54,11 +57,12 @@ def get_cache_dir() -> Path:
     return cache_dir
 
 
-def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache_dir()) -> Callable:
+def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache_dir(), cache_none: bool = False) -> Callable:
     """
     Decorator to persistently cache the results of a function call, with a cache life.
     :param cache_life: cache life
     :param cache_dir: cache directory
+    :param cache_none: cache None results (default is to not cache None results)
     """
 
     def decorator(func: Callable) -> Callable:
@@ -102,10 +106,16 @@ def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache
             else:
                 _cache_counters.cache_miss_counter += 1
                 result = func(*args, **kwargs)
-                cache[key] = result
-                cache_dir.mkdir(parents=True, exist_ok=True)
-                with open(cache_file_path, "wb") as cache_file_writer:
-                    pickle.dump(cache, cache_file_writer)
+                if result is not None or cache_none:
+                    cache[key] = result
+                    cache_dir.mkdir(parents=True, exist_ok=True)
+                    with cache_file_path.open("wb") as cache_file_writer:
+                        try:
+                            pickle.dump(cache, cache_file_writer)
+                        except (pickle.PicklingError, OSError) as e:
+                            log.warning(f"Error saving cache: {e}")
+                else:
+                    return result
             return cache[key]
 
         return wrapper
