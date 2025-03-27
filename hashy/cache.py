@@ -1,12 +1,12 @@
-import pickle
-from typing import Callable, Any, Dict, Union
+from typing import Callable, Any, Union, Dict
 from functools import wraps
 from pathlib import Path
 from datetime import datetime, timedelta
 import os
 from logging import getLogger
 
-from appdirs import user_cache_dir
+from platformdirs import user_cache_dir
+from sqlitedict import SqliteDict
 
 from . import __application_name__, __author__, get_dls_sha512
 
@@ -15,33 +15,33 @@ log = getLogger(__name__)
 
 # Global counters, handy for testing
 class CacheCounters:
-    def __init__(self, cache_hit_counter=0, cache_miss_counter=0, cache_load_counter=0, cache_expired_counter=0):
+    def __init__(self, cache_memory_hit_counter=0, cache_hit_counter=0, cache_miss_counter=0, cache_expired_counter=0):
+        self.cache_memory_hit_counter = cache_memory_hit_counter
         self.cache_hit_counter = cache_hit_counter
         self.cache_miss_counter = cache_miss_counter
-        self.cache_load_counter = cache_load_counter
         self.cache_expired_counter = cache_expired_counter
 
     def __repr__(self):
         values = [
+            f"cache_memory_hit_counter={self.cache_memory_hit_counter}",
             f"cache_hit_counter={self.cache_hit_counter}",
             f"cache_miss_counter={self.cache_miss_counter}",
-            f"cache_load_counter={self.cache_load_counter}",
             f"cache_expired_counter={self.cache_expired_counter}",
         ]
         return ",".join(values)
 
     def __eq__(self, other):
         return (
-            self.cache_hit_counter == other.cache_hit_counter
+            self.cache_memory_hit_counter == other.cache_memory_hit_counter
+            and self.cache_hit_counter == other.cache_hit_counter
             and self.cache_miss_counter == other.cache_miss_counter
-            and self.cache_load_counter == other.cache_load_counter
             and self.cache_expired_counter == other.cache_expired_counter
         )
 
     def clear(self):
+        self.cache_memory_hit_counter = 0
         self.cache_hit_counter = 0
         self.cache_miss_counter = 0
-        self.cache_load_counter = 0
         self.cache_expired_counter = 0
 
 
@@ -57,66 +57,59 @@ def get_cache_dir() -> Path:
     return cache_dir
 
 
-def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache_dir(), cache_none: bool = False) -> Callable:
+def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache_dir(), cache_none: bool = False, in_memory: bool = False) -> Callable:
     """
     Decorator to persistently cache the results of a function call, with a cache life.
     :param cache_life: cache life
     :param cache_dir: cache directory
     :param cache_none: cache None results (default is to not cache None results)
+    :param in_memory: if True, use an in-memory cache (default is to use a file-based cache)
     """
 
     def decorator(func: Callable) -> Callable:
-        cache: Dict[str, Any] = {}
+
+        function_name = func.__name__
+        in_memory_cache: Dict[str, Any] = {}
 
         # Create a cache file path based on the function name
-        cache_file_path = Path(cache_dir, f"{func.__name__}_cache.pkl")
-
-        def load_cache(_cache: Dict[str, Any]):
-            global _cache_counters
-
-            # Delete the cache file if it has expired
-            if cache_file_path.exists():
-                cache_file_mtime = datetime.fromtimestamp(os.path.getmtime(cache_file_path))
-                if cache_life is not None and datetime.now() - cache_file_mtime >= cache_life:
-                    _cache_counters.cache_expired_counter += 1
-                    try:
-                        cache_file_path.unlink(missing_ok=True)
-                    except OSError:
-                        ...
-                    _cache.clear()
-
-            # If we haven't already, load existing cache if file exists
-            if len(_cache) == 0 and cache_file_path.exists():
-                with open(cache_file_path, "rb") as cache_file_reader:
-                    try:
-                        # cache is pass by reference (don't create a new dict - clear and update the existing one)
-                        _cache.clear()
-                        _cache.update(pickle.load(cache_file_reader))
-                        _cache_counters.cache_load_counter += 1
-                    except (EOFError, pickle.UnpicklingError):
-                        cache_file_path.unlink(missing_ok=True)  # corrupt or old version - delete it
+        cache_file_path = Path(cache_dir, f"{function_name}_cache.sqlite")
 
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
             global _cache_counters
-            load_cache(cache)
-            key = get_dls_sha512([get_dls_sha512(list(args)), get_dls_sha512(kwargs)])
-            if key in cache:
-                _cache_counters.cache_hit_counter += 1
+
+            # Delete the cache database (file) if it has expired
+            if cache_file_path.exists():
+                cache_file_mtime = datetime.fromtimestamp(os.path.getmtime(cache_file_path))
+                if cache_life is not None and datetime.now() - cache_file_mtime >= cache_life:
+                    _cache_counters.cache_expired_counter += 1
+                    cache_file_path.unlink(missing_ok=True)
             else:
-                _cache_counters.cache_miss_counter += 1
-                result = func(*args, **kwargs)
-                if result is not None or cache_none:
-                    cache[key] = result
-                    cache_dir.mkdir(parents=True, exist_ok=True)
-                    with cache_file_path.open("wb") as cache_file_writer:
-                        try:
-                            pickle.dump(cache, cache_file_writer)
-                        except (pickle.PicklingError, OSError) as e:
-                            log.warning(f"Error saving cache: {e}")
-                else:
-                    return result
-            return cache[key]
+                cache_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+            key = get_dls_sha512([get_dls_sha512(list(args)), get_dls_sha512(kwargs)])
+
+            # use in-memory cache, if enabled
+            result = None
+            if in_memory and key in in_memory_cache:
+                _cache_counters.cache_memory_hit_counter += 1
+                _cache_counters.cache_hit_counter += 1
+                result = in_memory_cache[key]
+
+            if result is None:
+                with SqliteDict(cache_file_path, function_name) as db:
+                    if key in db:
+                        _cache_counters.cache_hit_counter += 1
+                        result = db[key]
+                    else:
+                        _cache_counters.cache_miss_counter += 1
+                        result = func(*args, **kwargs)
+                        if result is not None or cache_none:
+                            db[key] = result
+                            db.commit()
+                        if in_memory:
+                            in_memory_cache[key] = result
+            return result
 
         return wrapper
 
