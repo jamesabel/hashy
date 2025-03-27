@@ -1,6 +1,8 @@
 # app
-appdirs
+platformdirs
+sqlitedict
 # dev
+dotenv
 twine
 pytest
 wheel
@@ -10,4 +12,3 @@ pytest-cov
 black
 flake8
 mypy
-types-appdirs
