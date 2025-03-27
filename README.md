@@ -1,6 +1,6 @@
 # hashy
 
-Another hash library.
+Another hash library, but with caching!
 
 hashy provides an md5, sha256 or sha512 for string, file, dict, list and set.
 
@@ -12,9 +12,9 @@ Hashes for complex data types like dict, list and set are specific to hashy.
 ## cachy
 
 `hashy` also provides `cachy`, a decorator that can be used to persistently cache the results of a function to 
-disk. It is similar to `@functools.cache`, except:
+disk and (optionally) memory. It is similar to `@functools.cache`, except:
 
-- Persistent (saved to local disk)
+- Persistent (saved to local disk in a sqlite database)
   - Optionally can be saved to a user-specified directory, otherwise it's the usual cache directory for the OS
 - Optional user-specified cache life.
 - Doesn't require arguments be frozen and/or pickle-able. Uses hashy to create a hash of the arguments.
