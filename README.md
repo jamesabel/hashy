@@ -1,6 +1,6 @@
 # hashy
 
-Another hash library, but with caching!
+Another hash library
 
 hashy provides an md5, sha256 or sha512 for string, file, dict, list and set.
 
