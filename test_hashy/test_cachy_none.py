@@ -25,7 +25,6 @@ def test_cachy_cache_do_not_cache_none():
     assert counters.cache_miss_counter == 2
 
 
-
 def test_cachy_cache_do_cache_none():
 
     @cachy(cache_life, cache_directory, True)
