@@ -17,7 +17,7 @@ def test_zero_byte():
 
 
 def test_abe1_byte():
-    abe1 = b"\xAB\xE1"
+    abe1 = b"\xab\xe1"
     assert get_bytes_md5(abe1) == abe1_md5
     assert get_bytes_sha256(abe1) == abe1_sha256
     assert get_bytes_sha512(abe1) == abe1_sha512
