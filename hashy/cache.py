@@ -87,10 +87,17 @@ def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache
             # If entry has expired, delete it from the cache. Note that if there is no cache life (infinite), we avoid this operation completely.
             if cache_life is not None:
                 with SqliteDict(cache_file_path, write_table_name, encode=json.dumps, decode=json.loads) as ts_db:
-                    if key in ts_db and time.time() - ts_db[key] >= cache_life.total_seconds():
-                        _cache_counters.cache_expired_counter += 1
-                        del ts_db[key]
-                        ts_db.commit()
+                    key_in_ts_db = key in ts_db  # do once for performance
+                    if key_in_ts_db:
+                        ts = ts_db[key]
+                    else:
+                        ts = 0.0  # force a cache miss
+                    if time.time() - ts >= cache_life.total_seconds():
+                        # entry has expired
+                        if key_in_ts_db:
+                            _cache_counters.cache_expired_counter += 1
+                            del ts_db[key]
+                            ts_db.commit()
                         with SqliteDict(cache_file_path, function_name) as db:
                             if key in db:
                                 del db[key]
