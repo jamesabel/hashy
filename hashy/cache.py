@@ -135,5 +135,4 @@ def get_counters() -> CacheCounters:
 
 
 def clear_counters():
-    global _cache_counters
     _cache_counters.clear()
