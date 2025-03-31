@@ -95,12 +95,12 @@ def test_cachy_performance_small_data():
 
     clear_counters()
 
-    short_time = 0.02
-    long_time = 0.1
+    short_time = 0.05
+    long_time = 10.0 * short_time
 
     @cachy(cache_life, get_cache_directory())
     def takes_a_long_time(p):
-        time.sleep(1.01 * long_time)
+        time.sleep(1.5 * long_time)
         return p
 
     data = {"a": 1, "b": 2}
@@ -129,7 +129,7 @@ def test_cachy_performance_time_consuming_data_calculation():
         return result
 
     start = time.time()
-    big_n = int(1e6)
+    big_n = int(1e7)
     time_consuming_data_calculation(big_n)
     cold_duration = 1000.0 * (time.time() - start)  # mS
 
@@ -140,21 +140,21 @@ def test_cachy_performance_time_consuming_data_calculation():
     speedup = cold_duration / warm_duration
     print(f"{cold_duration=:.2f} mS,{warm_duration=:.2f} mS,{speedup=:.2f}x")
 
-    assert speedup > 10  # 30x has been observed
+    assert speedup > 20  # speedup for using DB (109x has been seen)
 
 
 def test_cachy_performance_time_consuming_data_calculation_in_memory():
 
     clear_counters()
 
-    # cache in memory
-    @cachy(cache_life, get_cache_directory(), in_memory=True)
+    # cache in memory (no cache life given = infinite)
+    @cachy(cache_dir=get_cache_directory(), in_memory=True)
     def time_consuming_data_calculation_in_memory(n):
         result = sum([math.sin(i) for i in range(int(n))])
         return result
 
     start = time.time()
-    big_n = int(1e6)
+    big_n = int(1e7)
     time_consuming_data_calculation_in_memory(big_n)
     cold_duration = 1000.0 * (time.time() - start)  # mS
 
@@ -165,7 +165,7 @@ def test_cachy_performance_time_consuming_data_calculation_in_memory():
     speedup = cold_duration / warm_duration
     print(f"{cold_duration=:.2f} mS,{warm_duration=:.2f} mS,{speedup=:.2f}x")
 
-    assert speedup > 100  # 800x has been observed
+    assert speedup > 1000  # speedup for in-memory caching (7500x has been seen)
 
 
 def test_cachy_complex():

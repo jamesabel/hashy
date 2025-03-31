@@ -1,9 +1,10 @@
 from typing import Callable, Any, Union, Dict
 from functools import wraps
 from pathlib import Path
-from datetime import datetime, timedelta
-import os
+from datetime import timedelta
+import json
 from logging import getLogger
+import time
 
 from platformdirs import user_cache_dir
 from sqlitedict import SqliteDict
@@ -78,16 +79,23 @@ def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache
         def wrapper(*args, **kwargs) -> Any:
             global _cache_counters
 
-            # Delete the cache database (file) if it has expired
-            if cache_file_path.exists():
-                cache_file_mtime = datetime.fromtimestamp(os.path.getmtime(cache_file_path))
-                if cache_life is not None and datetime.now() - cache_file_mtime >= cache_life:
-                    _cache_counters.cache_expired_counter += 1
-                    cache_file_path.unlink(missing_ok=True)
-            else:
-                cache_file_path.parent.mkdir(parents=True, exist_ok=True)
-
             key = get_dls_sha512([get_dls_sha512(list(args)), get_dls_sha512(kwargs)])
+
+            cache_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+            modified_table_name = f"{function_name}_mtime"
+
+            # If entry has expired, delete it from the cache. Note that if there is no cache life (infinite), we avoid this operation completely.
+            if cache_life is not None:
+                with SqliteDict(cache_file_path, modified_table_name, encode=json.dumps, decode=json.loads) as ts_db:
+                    if key in ts_db and time.time() - ts_db[key] >= cache_life.total_seconds():
+                        _cache_counters.cache_expired_counter += 1
+                        del ts_db[key]
+                        ts_db.commit()
+                        with SqliteDict(cache_file_path, function_name) as db:
+                            if key in db:
+                                del db[key]
+                                db.commit()
 
             # use in-memory cache, if enabled
             result = None
@@ -109,6 +117,13 @@ def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache
                             db.commit()
                         if in_memory:
                             in_memory_cache[key] = result
+
+            # update timestamp
+            if cache_life is not None:
+                with SqliteDict(cache_file_path, modified_table_name, encode=json.dumps, decode=json.loads) as ts_db:
+                    ts_db[key] = time.time()
+                    ts_db.commit()
+
             return result
 
         return wrapper
