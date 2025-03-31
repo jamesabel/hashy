@@ -82,11 +82,11 @@ def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache
 
             cache_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-            modified_table_name = f"{function_name}_mtime"
+            write_table_name = f"{function_name}_write_time"
 
             # If entry has expired, delete it from the cache. Note that if there is no cache life (infinite), we avoid this operation completely.
             if cache_life is not None:
-                with SqliteDict(cache_file_path, modified_table_name, encode=json.dumps, decode=json.loads) as ts_db:
+                with SqliteDict(cache_file_path, write_table_name, encode=json.dumps, decode=json.loads) as ts_db:
                     if key in ts_db and time.time() - ts_db[key] >= cache_life.total_seconds():
                         _cache_counters.cache_expired_counter += 1
                         del ts_db[key]
@@ -103,6 +103,7 @@ def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache
                 _cache_counters.cache_hit_counter += 1
                 result = in_memory_cache[key]
 
+            cache_write = False
             if result is None:
                 with SqliteDict(cache_file_path, function_name) as db:
                     if key in db:
@@ -116,10 +117,11 @@ def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache
                             db.commit()
                         if in_memory:
                             in_memory_cache[key] = result
+                        cache_write = True
 
-            # update timestamp
-            if cache_life is not None:
-                with SqliteDict(cache_file_path, modified_table_name, encode=json.dumps, decode=json.loads) as ts_db:
+            # update write timestamp
+            if cache_life is not None and cache_write:
+                with SqliteDict(cache_file_path, write_table_name, encode=json.dumps, decode=json.loads) as ts_db:
                     ts_db[key] = time.time()
                     ts_db.commit()
 
