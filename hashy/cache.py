@@ -77,7 +77,6 @@ def cachy(cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache
 
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
-            global _cache_counters
 
             key = get_dls_sha512([get_dls_sha512(list(args)), get_dls_sha512(kwargs)])
 
