@@ -2,6 +2,14 @@
 
 Another hash library
 
+## Installation
+
+```
+pip install hashy
+```
+
+## Introduction
+
 hashy provides an md5, sha256 or sha512 for string, file, dict, list and set.
 
 String and file hashes are conventional and can be compared to other implementations. For example
