@@ -1,6 +1,7 @@
 # hashy
 
-Another hash library
+Another hash library, but with a twist. It provides a simple interface to generate hashes for strings, files, dicts, 
+lists and sets. It also provides a decorator to cache the results of a function to disk and (optionally) memory.
 
 ## Installation
 
