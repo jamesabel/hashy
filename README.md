@@ -13,10 +13,13 @@ pip install hashy
 
 hashy provides an md5, sha256 or sha512 for string, file, dict, list and set.
 
-String and file hashes are conventional and can be compared to other implementations. For example
+String and file hashes are conventional and can be compared to other implementations. For example,
 you can go to an online hash calculator for "a" and get the same hash as hashy generates.
 
 Hashes for complex data types like dict, list and set are specific to hashy.
+
+Supports multithreading and multiprocessing, via the `sqlitedict` library. While the `sqlite` database itself is not 
+thread-safe/process-safe, the `sqlitedict` library provides a thread-safe/process-safe interface.
 
 ## cachy
 
