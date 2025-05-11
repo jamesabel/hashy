@@ -28,7 +28,7 @@ def test_cachy_concurrency():
     shutil.rmtree(temp_dir, ignore_errors=True)
     temp_dir.mkdir(parents=True, exist_ok=True)
 
-    concurrency = 10 * cpu_count()
+    concurrency = 100 * cpu_count()
     print(f"{duration=},{concurrency=}")
 
     threads = {}
@@ -57,4 +57,4 @@ def test_cachy_concurrency():
     writes_per_second = count / (datetime.now() - start).total_seconds()
     print(f"\r{datetime.now() - start},{count=},{writes_per_second=}")
 
-    assert writes_per_second > 10  # 61.9 observed
+    assert writes_per_second > 10  # 126.1 observed
