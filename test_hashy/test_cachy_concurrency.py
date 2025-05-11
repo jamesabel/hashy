@@ -1,8 +1,7 @@
 from pathlib import Path
 from datetime import timedelta, datetime
 import shutil
-from multiprocessing import Process
-from queue import Queue
+from threading import Thread
 
 from psutil import cpu_count
 
@@ -12,7 +11,7 @@ test_name = "test_cachy_concurrency"
 
 temp_dir = Path("temp", test_name)
 
-duration = timedelta(seconds=30)
+duration = timedelta(seconds=10)
 
 
 @cachy(cache_dir=temp_dir, in_memory=True)
@@ -29,33 +28,33 @@ def test_cachy_concurrency():
     shutil.rmtree(temp_dir, ignore_errors=True)
     temp_dir.mkdir(parents=True, exist_ok=True)
 
-    concurrency = cpu_count()
+    concurrency = 10 * cpu_count()
     print(f"{duration=},{concurrency=}")
 
-    processes = {}
+    threads = {}
 
     start = datetime.now()
     count = 0
 
     while (datetime.now() - start) < duration:
-        while len(processes) < concurrency:
-            queue = Queue()
-            process = Process(target=_function, args=(count,))
-            processes[count] = process
+
+        while len(threads) < concurrency:
+            thread = Thread(target=_function, args=(count,))
+            threads[count] = thread
             count += 1
-            print(f"\r{datetime.now() - start} : Starting process {count}", end="")
+            print(f"\r{datetime.now() - start} : Starting thread {count}", end="")
 
-        # start all processes as much at the same time as possible
-        for process in processes.values():
-            process.start()
+        # start all threads as much at the same time as possible
+        for thread in threads.values():
+            thread.start()
 
-        for process_number in list(processes):
-            process = processes[process_number]
-            print(f"\r{datetime.now() - start} : Waiting on process {process_number}", end="")
-            process.join()
-            del processes[process_number]
+        for thread_number in list(threads):
+            thread = threads[thread_number]
+            print(f"\r{datetime.now() - start} : Waiting on thread {thread_number}", end="")
+            thread.join()
+            del threads[thread_number]
 
     writes_per_second = count / (datetime.now() - start).total_seconds()
     print(f"\r{datetime.now() - start},{count=},{writes_per_second=}")
 
-    assert writes_per_second > 5  # 9.7 observed
+    assert writes_per_second > 10  # 61.9 observed
