@@ -186,11 +186,12 @@ def cachy(
                         metadata_db.commit()
 
             # LRU cache
-            if isinstance(max_cache_size, Callable):
+            if max_cache_size is None or isinstance(max_cache_size, int):
+                _max_cache_size = max_cache_size
+            else:
                 # if max_cache_size is a callable, call it to get the value to use
                 _max_cache_size = max_cache_size()
-            else:
-                _max_cache_size = max_cache_size
+
             eviction_attempt_count = 0  # to avoid infinite loop if we have a problem accessing the cache file
             eviction_attempt_limit = 10
             while _max_cache_size is not None and cache_file_path.stat().st_size > _max_cache_size and eviction_attempt_count < eviction_attempt_limit:
