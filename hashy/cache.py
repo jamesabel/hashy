@@ -71,6 +71,7 @@ _cache_counters = CacheCounters()
 
 USE_COMPRESSION = True
 
+
 def cachy_compress(data: Any) -> bytes:
     """
     Compress the data using gzip and pickle.
@@ -83,6 +84,7 @@ def cachy_compress(data: Any) -> bytes:
         out = data
     return out
 
+
 def cachy_decompress(data: bytes) -> Any:
     """
     Decompress the data using gzip and pickle.
@@ -94,6 +96,7 @@ def cachy_decompress(data: bytes) -> Any:
     else:
         out = data
     return out
+
 
 def get_cache_dir() -> Path:
     """
@@ -181,7 +184,7 @@ def cachy(
                         # hit
                         _cache_counters.cache_hit_counter += 1
                         cached_result = db[key]
-                        result =  cachy_decompress(cached_result)
+                        result = cachy_decompress(cached_result)
                     else:
                         # miss - get the value from the function
                         _cache_counters.cache_miss_counter += 1
