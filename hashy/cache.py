@@ -15,6 +15,10 @@ log = getLogger(__name__)
 
 
 class CacheMetadata:
+    """
+    Metadata for a cache entry, including read and write timestamps.
+    """
+
     def __init__(self):
         now = time.time()  # if both are None, use one value for both
         self.read_timestamp = now
@@ -23,6 +27,10 @@ class CacheMetadata:
 
 # Global counters, handy for testing
 class CacheCounters:
+    """
+    Cache counters for cache hits, misses, expired entries, and evictions.
+    """
+
     def __init__(self, cache_memory_hit_counter=0, cache_hit_counter=0, cache_miss_counter=0, cache_expired_counter=0, cache_eviction_counter=0):
         self.cache_memory_hit_counter = cache_memory_hit_counter
         self.cache_hit_counter = cache_hit_counter
@@ -94,15 +102,18 @@ def cachy(
 
             key = get_dls_sha512([get_dls_sha512(list(args)), get_dls_sha512(kwargs)])
 
-            cache_file_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                cache_file_path.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                log.info(f'Error creating cache directory: "{e}"')
 
             metadata_table_name = f"{function_name}_metadata"
 
             # If an entry has expired, delete it from the cache.
             # Keep the metadata in a separate table so that when we update the metadata, we don't have to write the payload (since we're using SqliteDict, we have to write the entire row)
             with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
-                key_in_ts_db = key in metadata_db  # do once for performance
-                if key_in_ts_db:
+                key_in_metadata_db = key in metadata_db  # do once for performance
+                if key_in_metadata_db:
                     try:
                         row_metadata = metadata_db[key]
                     except (KeyError, TypeError):
@@ -113,7 +124,7 @@ def cachy(
                     write_ts = 0.0  # force a cache miss
                 if cache_life is not None and time.time() - write_ts >= cache_life.total_seconds():
                     # entry has expired
-                    if key_in_ts_db:
+                    if key_in_metadata_db:
                         _cache_counters.cache_expired_counter += 1
                         del metadata_db[key]
                         metadata_db.commit()
@@ -121,7 +132,7 @@ def cachy(
                         if key in db:
                             del db[key]
                             db.commit()
-                elif key_in_ts_db:
+                elif key_in_metadata_db:
                     # update read time
                     row_metadata.read_timestamp = time.time()
                     metadata_db[key] = row_metadata
@@ -161,10 +172,12 @@ def cachy(
             elif cache_hit:
                 # update read timestamp
                 with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
-                    row_metadata = metadata_db[key]
-                    row_metadata.read_timestamp = time.time()
-                    metadata_db[key] = row_metadata
-                    metadata_db.commit()
+                    if (row_metadata := metadata_db.get(key)) is None:
+                        log.info(f"Cache hit, but no metadata found for {key}. This is unexpected.")
+                    else:
+                        row_metadata.read_timestamp = time.time()
+                        metadata_db[key] = row_metadata
+                        metadata_db.commit()
 
             # LRU cache
             if isinstance(max_cache_size, Callable):
