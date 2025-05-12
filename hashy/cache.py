@@ -206,10 +206,17 @@ def cachy(
                         del metadata_db[oldest_key]
                         metadata_db.commit()
                         with SqliteDict(cache_file_path, function_name) as db:
-                            if oldest_key in db:
+                            try:
                                 del db[oldest_key]
                                 db.commit()
-                                _cache_counters.cache_eviction_counter += 1
+                            except KeyError:
+                                log.info(f'Key "{oldest_key}" not found in cache for "{function_name}". This is unexpected.')
+                        if in_memory:
+                            try:
+                                del in_memory_cache[oldest_key]
+                            except KeyError:
+                                log.info(f'Key "{oldest_key}" not found in in-memory cache for "{function_name}". This is unexpected.')
+                        _cache_counters.cache_eviction_counter += 1
 
                 # shrink the database file (this does not happen automatically)
                 try:
