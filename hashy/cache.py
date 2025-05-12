@@ -159,7 +159,10 @@ def cachy(
                         result = func(*args, **kwargs)
                         if result is not None or cache_none:
                             db[key] = result
-                            db.commit()
+                            try:
+                                db.commit()
+                            except sqlite3.OperationalError:
+                                log.info(f'Commit failed for "{function_name}", probably because "{cache_file_path}" is locked. This is expected if multiple processes are using the cache.')
                         if in_memory:
                             in_memory_cache[key] = result
                         cache_write = True
@@ -168,7 +171,10 @@ def cachy(
             if cache_write:
                 with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
                     metadata_db[key] = CacheMetadata()
-                    metadata_db.commit()
+                    try:
+                        metadata_db.commit()
+                    except sqlite3.OperationalError:
+                        log.info(f'Commit failed for "{function_name}", probably because "{cache_file_path}" is locked. This is expected if multiple processes are using the cache.')
             elif cache_hit:
                 # update read timestamp
                 with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
