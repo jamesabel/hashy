@@ -8,7 +8,7 @@ def test_size_based_cache():
 
     clear_counters()
 
-    @cachy(cache_dir=get_cache_directory(), max_cache_size=1_000_000)
+    @cachy(cache_dir=get_cache_directory(), max_cache_size=200_000)
     def lru_func(_size: int):
         big_data = [x for x in range(_size)]
         return big_data
@@ -20,4 +20,5 @@ def test_size_based_cache():
         lru_func(size)
 
     counters = get_counters()
-    assert counters == CacheCounters(cache_memory_hit_counter=0, cache_hit_counter=0, cache_miss_counter=iterations, cache_expired_counter=0, cache_eviction_counter=62)
+    # eviction counter is derived empirically (running the test)
+    assert counters == CacheCounters(cache_memory_hit_counter=0, cache_hit_counter=0, cache_miss_counter=iterations, cache_expired_counter=0, cache_eviction_counter=68)

@@ -5,6 +5,8 @@ from datetime import timedelta
 from logging import getLogger
 import time
 import sqlite3
+import pickle
+import lzma
 
 from platformdirs import user_cache_dir
 from sqlitedict import SqliteDict
@@ -67,6 +69,31 @@ class CacheCounters:
 
 _cache_counters = CacheCounters()
 
+USE_COMPRESSION = True
+
+def cachy_compress(data: Any) -> bytes:
+    """
+    Compress the data using gzip and pickle.
+    :param data:
+    :return:
+    """
+    if USE_COMPRESSION:
+        out = lzma.compress(pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL))
+    else:
+        out = data
+    return out
+
+def cachy_decompress(data: bytes) -> Any:
+    """
+    Decompress the data using gzip and pickle.
+    :param data:
+    :return:
+    """
+    if USE_COMPRESSION:
+        out = pickle.loads(lzma.decompress(data))
+    else:
+        out = data
+    return out
 
 def get_cache_dir() -> Path:
     """
@@ -85,8 +112,8 @@ def cachy(
     :param cache_life: Cache life.
     :param cache_dir: Cache directory.
     :param cache_none: Cache None results (default is to not cache None results).
-    :param in_memory: If True, use an in-memory cache (default is to use a file-based cache).
-    :param max_cache_size: Maximum size of the cache as an int, or a callable that returns max cache size, or None (default is None, which means no limit)
+    :param in_memory: If True, use an in-memory cache for reads (default is to only use a file-based cache).
+    :param max_cache_size: Maximum size of the LRU cache as an int, or a callable that returns max cache size, or None (default is None, which means no limit)
     """
 
     def decorator(func: Callable) -> Callable:
@@ -109,11 +136,10 @@ def cachy(
 
             metadata_table_name = f"{function_name}_metadata"
 
-            # If an entry has expired, delete it from the cache.
+            # If an entry has expired, delete it from the cache. Also updates the read time.
             # Keep the metadata in a separate table so that when we update the metadata, we don't have to write the payload (since we're using SqliteDict, we have to write the entire row)
             with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
-                key_in_metadata_db = key in metadata_db  # do once for performance
-                if key_in_metadata_db:
+                if key in metadata_db:
                     try:
                         row_metadata = metadata_db[key]
                     except (KeyError, TypeError):
@@ -124,7 +150,7 @@ def cachy(
                     write_ts = 0.0  # force a cache miss
                 if cache_life is not None and time.time() - write_ts >= cache_life.total_seconds():
                     # entry has expired
-                    if key_in_metadata_db:
+                    if key in metadata_db:
                         _cache_counters.cache_expired_counter += 1
                         del metadata_db[key]
                         metadata_db.commit()
@@ -132,42 +158,47 @@ def cachy(
                         if key in db:
                             del db[key]
                             db.commit()
-                elif key_in_metadata_db:
+                if key in metadata_db:
                     # update read time
                     row_metadata.read_timestamp = time.time()
                     metadata_db[key] = row_metadata
                     metadata_db.commit()
 
-            # use in-memory cache, if enabled
             result = None
+
+            # use in-memory cache, if enabled
             if in_memory and key in in_memory_cache:
                 _cache_counters.cache_memory_hit_counter += 1
                 _cache_counters.cache_hit_counter += 1
-                result = in_memory_cache[key]
+                cached_result = in_memory_cache[key]
+                result = cachy_decompress(cached_result)
 
             cache_write = False
-            cache_hit = False
             if result is None:
-                # use file-based cache
+                # Entry not in memory cache. Try file-based cache.
                 with SqliteDict(cache_file_path, function_name) as db:
                     if key in db:
-                        cache_hit = True
+                        # hit
                         _cache_counters.cache_hit_counter += 1
-                        result = db[key]
+                        cached_result = db[key]
+                        result =  cachy_decompress(cached_result)
                     else:
+                        # miss - get the value from the function
                         _cache_counters.cache_miss_counter += 1
                         result = func(*args, **kwargs)
+                        cached_result = cachy_compress(result)
                         if result is not None or cache_none:
-                            db[key] = result
+                            # cache the result
+                            db[key] = cached_result
                             try:
                                 db.commit()
                             except sqlite3.OperationalError:
                                 log.info(f'Commit failed for "{function_name}", probably because "{cache_file_path}" is locked. This is expected if multiple processes are using the cache.')
                         if in_memory:
-                            in_memory_cache[key] = result
+                            in_memory_cache[key] = cached_result
                         cache_write = True
 
-            # update write timestamp
+            # update write timestamp (for both cache_life and LRU cache's max_cache_size)
             if cache_write:
                 with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
                     metadata_db[key] = CacheMetadata()
@@ -175,61 +206,52 @@ def cachy(
                         metadata_db.commit()
                     except sqlite3.OperationalError:
                         log.info(f'Commit failed for "{function_name}", probably because "{cache_file_path}" is locked. This is expected if multiple processes are using the cache.')
-            elif cache_hit:
-                # update read timestamp
-                with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
-                    if (row_metadata := metadata_db.get(key)) is None:
-                        log.info(f"Cache hit, but no metadata found for {key}. This is unexpected.")
-                    else:
-                        row_metadata.read_timestamp = time.time()
-                        metadata_db[key] = row_metadata
-                        metadata_db.commit()
 
             # LRU cache
-            if max_cache_size is None or isinstance(max_cache_size, int):
-                _max_cache_size = max_cache_size
-            else:
-                # if max_cache_size is a callable, call it to get the value to use
-                _max_cache_size = max_cache_size()
+            if cache_write and max_cache_size is not None:
+                if isinstance(max_cache_size, int):
+                    _max_cache_size = max_cache_size
+                else:
+                    # if max_cache_size is a callable, call it to get the value to use
+                    _max_cache_size = max_cache_size()
+                eviction_attempt_count = 0  # to avoid infinite loop if we have a problem accessing the cache file
+                eviction_attempt_limit = 10
+                while _max_cache_size is not None and cache_file_path.stat().st_size > _max_cache_size and eviction_attempt_count < eviction_attempt_limit:
+                    # remove the least recently used entry
+                    with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
+                        oldest_key = None
+                        oldest_read_timestamp = None
+                        for k, ts in metadata_db.items():
+                            if oldest_read_timestamp is None or ts.read_timestamp < oldest_read_timestamp:
+                                oldest_key = k
+                                oldest_read_timestamp = ts.read_timestamp
+                        if oldest_key is not None:
+                            del metadata_db[oldest_key]
+                            metadata_db.commit()
+                            with SqliteDict(cache_file_path, function_name) as db:
+                                try:
+                                    del db[oldest_key]
+                                    db.commit()
+                                except KeyError:
+                                    log.info(f'Key "{oldest_key}" not found in cache for "{function_name}". This is unexpected.')
+                            if in_memory:
+                                try:
+                                    del in_memory_cache[oldest_key]
+                                except KeyError:
+                                    log.info(f'Key "{oldest_key}" not found in in-memory cache for "{function_name}". This is unexpected.')
+                            _cache_counters.cache_eviction_counter += 1
 
-            eviction_attempt_count = 0  # to avoid infinite loop if we have a problem accessing the cache file
-            eviction_attempt_limit = 10
-            while _max_cache_size is not None and cache_file_path.stat().st_size > _max_cache_size and eviction_attempt_count < eviction_attempt_limit:
-                # remove the least recently used entry
-                with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
-                    oldest_key = None
-                    oldest_read_timestamp = None
-                    for k, ts in metadata_db.items():
-                        if oldest_read_timestamp is None or ts.read_timestamp < oldest_read_timestamp:
-                            oldest_key = k
-                            oldest_read_timestamp = ts.read_timestamp
-                    if oldest_key is not None:
-                        del metadata_db[oldest_key]
-                        metadata_db.commit()
-                        with SqliteDict(cache_file_path, function_name) as db:
-                            try:
-                                del db[oldest_key]
-                                db.commit()
-                            except KeyError:
-                                log.info(f'Key "{oldest_key}" not found in cache for "{function_name}". This is unexpected.')
-                        if in_memory:
-                            try:
-                                del in_memory_cache[oldest_key]
-                            except KeyError:
-                                log.info(f'Key "{oldest_key}" not found in in-memory cache for "{function_name}". This is unexpected.')
-                        _cache_counters.cache_eviction_counter += 1
+                    # shrink the database file (this does not happen automatically)
+                    try:
+                        with sqlite3.connect(cache_file_path) as conn:
+                            conn.execute("VACUUM")  # shrinks freelist back into the file
+                            conn.commit()
+                    except sqlite3.OperationalError:
+                        log.info(f'VACUUM failed for "{function_name}", probably because "{cache_file_path}" is locked. This is expected if multiple processes are using the cache.')
 
-                # shrink the database file (this does not happen automatically)
-                try:
-                    with sqlite3.connect(cache_file_path) as conn:
-                        conn.execute("VACUUM")  # shrinks freelist back into the file
-                        conn.commit()
-                except sqlite3.OperationalError:
-                    log.info(f'VACUUM failed for "{function_name}", probably because "{cache_file_path}" is locked. This is expected if multiple processes are using the cache.')
-
-                eviction_attempt_count += 1
-            if eviction_attempt_count >= eviction_attempt_limit:
-                log.info(f'Eviction attempt limit reached ({eviction_attempt_limit=}) for "{function_name}" in "{cache_file_path}"')
+                    eviction_attempt_count += 1
+                if eviction_attempt_count >= eviction_attempt_limit:
+                    log.info(f'Eviction attempt limit reached ({eviction_attempt_limit=}) for "{function_name}" in "{cache_file_path}"')
 
             return result
 
