@@ -79,7 +79,10 @@ def cachy_compress(data: Any) -> bytes:
     :return:
     """
     if USE_COMPRESSION:
-        out = lzma.compress(pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL))
+        p = pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)
+        out = lzma.compress(p)
+        if (compression_ratio := len(p) / len(out)) > 1.0:
+            log.info(f"Compressed {len(p)} bytes to {len(out)} bytes, compression ratio: {compression_ratio:.2f}")
     else:
         out = data
     return out
