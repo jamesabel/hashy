@@ -6,6 +6,7 @@ from threading import Thread
 from psutil import cpu_count
 
 from hashy import cachy
+from hashy.cache import get_counters
 
 test_name = "test_cachy_concurrency"
 
@@ -18,6 +19,18 @@ duration = timedelta(seconds=10)
 def _function(x):
     result = x + 1
     return result
+
+
+class TestThread(Thread):
+
+    def __init__(self, x):
+        super().__init__()
+        self.x = x
+
+    def run(self):
+        for iteration in range(10):
+            result = _function(self.x)
+            assert result == self.x + 1, f"Expected {self.x + 1}, got {result}"
 
 
 def test_cachy_concurrency():
@@ -39,7 +52,7 @@ def test_cachy_concurrency():
     while (datetime.now() - start) < duration:
 
         while len(threads) < concurrency:
-            thread = Thread(target=_function, args=(count,))
+            thread = TestThread(count)
             threads[count] = thread
             count += 1
             print(f"\r{datetime.now() - start} : Starting thread {count}", end="")
@@ -57,4 +70,7 @@ def test_cachy_concurrency():
     writes_per_second = count / (datetime.now() - start).total_seconds()
     print(f"\r{datetime.now() - start},{count=},{writes_per_second=}")
 
-    assert writes_per_second > 10  # 126.1 observed
+    assert writes_per_second > 10  # 38 observed
+
+    counters = get_counters()
+    print(f"Cache counters: {counters}")
