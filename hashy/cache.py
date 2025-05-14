@@ -143,32 +143,34 @@ def cachy(
             metadata_table_name = f"{function_name}_metadata"
 
             # If an entry has expired, delete it from the cache. Also updates the read time.
-            # Keep the metadata in a separate table so that when we update the metadata, we don't have to write the payload (since we're using SqliteDict, we have to write the entire row)
-            with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
-                if key in metadata_db:
-                    try:
-                        row_metadata = metadata_db[key]
-                    except (KeyError, TypeError):
-                        # can happen if the cache is an old format
-                        row_metadata = CacheMetadata()
-                    write_ts = row_metadata.write_timestamp
-                else:
-                    write_ts = 0.0  # force a cache miss
-                if cache_life is not None and time.time() - write_ts >= cache_life.total_seconds():
-                    # entry has expired
+            # Keep the metadata in a separate table so that when we update the metadata, we don't have to write the payload (since we're using SqliteDict, we have to write the entire row).
+            # If cache life is None (infinite), we don't need to check for expiration.
+            if cache_life is not None or max_cache_size is not None:
+                with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
                     if key in metadata_db:
-                        _cache_counters.cache_expired_counter += 1
-                        del metadata_db[key]
+                        try:
+                            row_metadata = metadata_db[key]
+                        except (KeyError, TypeError):
+                            # can happen if the cache is an old format
+                            row_metadata = CacheMetadata()
+                        write_ts = row_metadata.write_timestamp
+                    else:
+                        write_ts = 0.0  # force a cache miss
+                    if cache_life is not None and time.time() - write_ts >= cache_life.total_seconds():
+                        # entry has expired
+                        if key in metadata_db:
+                            _cache_counters.cache_expired_counter += 1
+                            del metadata_db[key]
+                            metadata_db.commit()
+                        with SqliteDict(cache_file_path, function_name) as db:
+                            if key in db:
+                                del db[key]
+                                db.commit()
+                    if max_cache_size is not None and key in metadata_db:
+                        # update read time
+                        row_metadata.read_timestamp = time.time()
+                        metadata_db[key] = row_metadata
                         metadata_db.commit()
-                    with SqliteDict(cache_file_path, function_name) as db:
-                        if key in db:
-                            del db[key]
-                            db.commit()
-                if key in metadata_db:
-                    # update read time
-                    row_metadata.read_timestamp = time.time()
-                    metadata_db[key] = row_metadata
-                    metadata_db.commit()
 
             result = None
 
@@ -205,7 +207,7 @@ def cachy(
                         cache_write = True
 
             # update write timestamp (for both cache_life and LRU cache's max_cache_size)
-            if cache_write:
+            if cache_write and (cache_life is not None or max_cache_size is not None):
                 with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
                     metadata_db[key] = CacheMetadata()
                     try:
