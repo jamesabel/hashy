@@ -9,12 +9,14 @@ number_of_test_values = 10
 outer_iterations = 100
 number_of_hits = number_of_test_values * outer_iterations
 
+
 def _check_counters():
     counters = get_counters()
     assert counters.cache_hit_counter == number_of_hits
     assert counters.cache_memory_hit_counter == number_of_hits
     assert counters.cache_miss_counter == number_of_test_values
     print(f"{counters=}")
+
 
 def test_cachy_memory_performance_infinite_cache_life():
     """
@@ -32,7 +34,7 @@ def test_cachy_memory_performance_infinite_cache_life():
     # warm the cache
     for i in range(number_of_test_values):
         memory_performance_function_infinite(i)
-    start_time  = time.time()
+    start_time = time.time()
 
     for outer in range(outer_iterations):
         # read the cache
@@ -65,7 +67,7 @@ def test_cachy_memory_performance_finite_cache_life():
     # warm the cache
     for i in range(number_of_test_values):
         memory_performance_function_finite(i)
-    start_time  = time.time()
+    start_time = time.time()
 
     for outer in range(outer_iterations):
         # read the cache
