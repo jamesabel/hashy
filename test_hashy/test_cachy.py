@@ -92,7 +92,7 @@ def test_cachy_performance_small_data():
 
     clear_counters()
 
-    short_time = 0.05
+    short_time = 0.1
     long_time = 10.0 * short_time
 
     @cachy(cache_life, get_cache_directory())

@@ -21,4 +21,4 @@ def test_size_based_cache():
 
     counters = get_counters()
     # eviction counter is derived empirically (running the test)
-    assert counters == CacheCounters(cache_memory_hit_counter=0, cache_hit_counter=0, cache_miss_counter=iterations, cache_expired_counter=0, cache_eviction_counter=68)
+    assert counters == CacheCounters(cache_memory_hit_counter=0, cache_hit_counter=0, cache_miss_counter=iterations, cache_expired_counter=0, cache_eviction_counter=20)

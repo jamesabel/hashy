@@ -70,6 +70,16 @@ class CacheCounters:
 _cache_counters = CacheCounters()
 
 USE_COMPRESSION = True
+JOURNAL_MODE = "WAL"  # WAL maximizes throughput and concurrency without sacrificing durability
+
+
+class CachyDBDict(SqliteDict):
+    """
+    Set SqliteDict parameters best for cachy. Also add typing.
+    """
+
+    def __init__(self, cache_file_path: Path, table_name: str):
+        super().__init__(cache_file_path, table_name, journal_mode=JOURNAL_MODE)
 
 
 def cachy_compress(data: Any) -> bytes:
@@ -146,7 +156,7 @@ def cachy(
             # Keep the metadata in a separate table so that when we update the metadata, we don't have to write the payload (since we're using SqliteDict, we have to write the entire row).
             # If cache life is None (infinite), we don't need to check for expiration.
             if cache_life is not None or max_cache_size is not None:
-                with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
+                with CachyDBDict(cache_file_path, metadata_table_name) as metadata_db:
                     if key in metadata_db:
                         try:
                             row_metadata = metadata_db[key]
@@ -162,7 +172,7 @@ def cachy(
                             _cache_counters.cache_expired_counter += 1
                             del metadata_db[key]
                             metadata_db.commit()
-                        with SqliteDict(cache_file_path, function_name) as db:
+                        with CachyDBDict(cache_file_path, function_name) as db:
                             if key in db:
                                 del db[key]
                                 db.commit()
@@ -184,7 +194,7 @@ def cachy(
             cache_write = False
             if result is None:
                 # Entry not in memory cache. Try file-based cache.
-                with SqliteDict(cache_file_path, function_name) as db:
+                with CachyDBDict(cache_file_path, function_name) as db:
                     if key in db:
                         # hit
                         _cache_counters.cache_hit_counter += 1
@@ -208,7 +218,7 @@ def cachy(
 
             # update write timestamp (for both cache_life and LRU cache's max_cache_size)
             if cache_write and (cache_life is not None or max_cache_size is not None):
-                with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
+                with CachyDBDict(cache_file_path, metadata_table_name) as metadata_db:
                     metadata_db[key] = CacheMetadata()
                     try:
                         metadata_db.commit()
@@ -226,7 +236,7 @@ def cachy(
                 eviction_attempt_limit = 10
                 while _max_cache_size is not None and cache_file_path.stat().st_size > _max_cache_size and eviction_attempt_count < eviction_attempt_limit:
                     # remove the least recently used entry
-                    with SqliteDict(cache_file_path, metadata_table_name) as metadata_db:
+                    with CachyDBDict(cache_file_path, metadata_table_name) as metadata_db:
                         oldest_key = None
                         oldest_read_timestamp = None
                         for k, ts in metadata_db.items():
@@ -236,7 +246,7 @@ def cachy(
                         if oldest_key is not None:
                             del metadata_db[oldest_key]
                             metadata_db.commit()
-                            with SqliteDict(cache_file_path, function_name) as db:
+                            with CachyDBDict(cache_file_path, function_name) as db:
                                 try:
                                     del db[oldest_key]
                                     db.commit()
