@@ -7,6 +7,7 @@ import time
 import sqlite3
 import pickle
 import lzma
+import random
 
 from platformdirs import user_cache_dir
 from sqlitedict import SqliteDict
@@ -156,31 +157,42 @@ def cachy(
             # Keep the metadata in a separate table so that when we update the metadata, we don't have to write the payload (since we're using SqliteDict, we have to write the entire row).
             # If cache life is None (infinite), we don't need to check for expiration.
             if cache_life is not None or max_cache_size is not None:
-                with CachyDBDict(cache_file_path, metadata_table_name) as metadata_db:
-                    if key in metadata_db:
-                        try:
-                            row_metadata = metadata_db[key]
-                        except (KeyError, TypeError):
-                            # can happen if the cache is an old format
-                            row_metadata = CacheMetadata()
-                        write_ts = row_metadata.write_timestamp
-                    else:
-                        write_ts = 0.0  # force a cache miss
-                    if cache_life is not None and time.time() - write_ts >= cache_life.total_seconds():
-                        # entry has expired
-                        if key in metadata_db:
-                            _cache_counters.cache_expired_counter += 1
-                            del metadata_db[key]
-                            metadata_db.commit()
-                        with CachyDBDict(cache_file_path, function_name) as db:
-                            if key in db:
-                                del db[key]
-                                db.commit()
-                    if max_cache_size is not None and key in metadata_db:
-                        # update read time
-                        row_metadata.read_timestamp = time.time()
-                        metadata_db[key] = row_metadata
-                        metadata_db.commit()
+                write_ok = False
+                write_loop_count_down = 100
+                while not write_ok and write_loop_count_down > 0:
+                    try:
+                        with CachyDBDict(cache_file_path, metadata_table_name) as metadata_db:
+                            if key in metadata_db:
+                                try:
+                                    row_metadata = metadata_db[key]
+                                except (KeyError, TypeError):
+                                    # can happen if the cache is an old format
+                                    row_metadata = CacheMetadata()
+                                write_ts = row_metadata.write_timestamp
+                            else:
+                                write_ts = 0.0  # force a cache miss
+                            if cache_life is not None and time.time() - write_ts >= cache_life.total_seconds():
+                                # entry has expired
+                                if key in metadata_db:
+                                    _cache_counters.cache_expired_counter += 1
+                                    del metadata_db[key]
+                                    metadata_db.commit()
+                                with CachyDBDict(cache_file_path, function_name) as db:
+                                    if key in db:
+                                        del db[key]
+                                        db.commit()
+                            if max_cache_size is not None and key in metadata_db:
+                                # update read time
+                                row_metadata.read_timestamp = time.time()
+                                metadata_db[key] = row_metadata
+                                metadata_db.commit()
+                        write_ok = True
+                    except sqlite3.OperationalError:
+                        log.debug(f'Error accessing cache for "{function_name}", probably because "{cache_file_path}" is locked. This is expected if multiple processes are using the cache.')
+                        time.sleep((0.01 * random.random()) + 0.01)
+                    write_loop_count_down -= 1
+                if not write_ok:
+                    log.warning(f'Error accessing cache for "{function_name}", probably because "{cache_file_path}" is locked.')
 
             result = None
 
