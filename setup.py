@@ -4,7 +4,7 @@ from setuptools import setup
 
 from hashy.__version__ import __version__, __title__, __author__, __author_email__, __url__, __download_url__, __description__
 
-readme_file_path = os.path.join("readme.md")
+readme_file_path = os.path.join("README.md")
 
 with open(readme_file_path, encoding="utf-8") as f:
     long_description = "\n" + f.read()

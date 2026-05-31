@@ -17,6 +17,10 @@ from . import __application_name__, __author__, get_dls_sha512
 log = getLogger(__name__)
 
 
+class CacheReadError(Exception):
+    """Cache entry could not be decompressed/unpickled; treat as a miss."""
+
+
 class CacheMetadata:
     """
     Metadata for a cache entry, including read and write timestamps.
@@ -100,16 +104,12 @@ def cachy_compress(data: Any) -> bytes:
 
 
 def cachy_decompress(data: bytes) -> Any:
-    """
-    Decompress the data using gzip and pickle.
-    :param data:
-    :return:
-    """
-    if USE_COMPRESSION:
-        out = pickle.loads(lzma.decompress(data))
-    else:
-        out = data
-    return out
+    if not USE_COMPRESSION:
+        return data
+    try:
+        return pickle.loads(lzma.decompress(data))
+    except (MemoryError, lzma.LZMAError, EOFError, pickle.UnpicklingError) as e:
+        raise CacheReadError(f"unreadable cache entry ({len(data)} bytes): {e}") from e
 
 
 def get_cache_dir() -> Path:
@@ -198,27 +198,41 @@ def cachy(
 
             # use in-memory cache, if enabled
             if in_memory and key in in_memory_cache:
-                _cache_counters.cache_memory_hit_counter += 1
-                _cache_counters.cache_hit_counter += 1
-                cached_result = in_memory_cache[key]
-                result = cachy_decompress(cached_result)
+                try:
+                    result = cachy_decompress(in_memory_cache[key])
+                    _cache_counters.cache_memory_hit_counter += 1
+                    _cache_counters.cache_hit_counter += 1
+                except CacheReadError as e:
+                    log.warning(f'Discarding unreadable in-memory cache entry for "{function_name}": {e}')
+                    in_memory_cache.pop(key, None)
+                    result = None  # leaves result None -> falls through to the file/recompute path below
 
             cache_write = False
             if result is None:
                 # Entry not in memory cache. Try file-based cache.
                 with CachyDBDict(cache_file_path, function_name) as db:
+                    is_hit = False
                     if key in db:
-                        # hit
+                        try:
+                            result = cachy_decompress(db[key])
+                            is_hit = True
+                        except CacheReadError as e:
+                            # unreadable entry (transient OOM or corruption) -> drop it, treat as miss
+                            log.warning(f'Discarding unreadable cache entry for "{function_name}": {e}')
+                            try:
+                                del db[key]
+                                db.commit()
+                            except (KeyError, sqlite3.OperationalError):
+                                pass
+
+                    if is_hit:
                         _cache_counters.cache_hit_counter += 1
-                        cached_result = db[key]
-                        result = cachy_decompress(cached_result)
                     else:
-                        # miss - get the value from the function
+                        # miss (genuine, or just-discarded bad entry) - recompute
                         _cache_counters.cache_miss_counter += 1
                         result = func(*args, **kwargs)
                         cached_result = cachy_compress(result)
                         if result is not None or cache_none:
-                            # cache the result
                             db[key] = cached_result
                             try:
                                 db.commit()
