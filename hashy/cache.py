@@ -1,4 +1,24 @@
-from typing import Callable, Any, Union, Dict
+"""
+``cachy`` -- a persistent, process/thread-safe function-result cache.
+
+The public surface is the :func:`cachy` decorator plus the :class:`CacheCounters`
+helpers (:func:`get_counters` / :func:`clear_counters`). Everything else in this
+module is supporting machinery:
+
+- :class:`CachyDBDict` -- a thin ``SqliteDict`` subclass with cachy's settings.
+- :func:`cachy_compress` / :func:`cachy_decompress` -- payload (de)serialization.
+- :class:`CacheMetadata` -- per-entry read/write timestamps (kept in a separate
+  table so timestamp updates do not rewrite the payload).
+- :class:`_CachyCache` -- holds one decorated function's configuration and
+  implements the read/compute/write/evict logic. One instance per decorated
+  function; the returned wrapper just delegates to :meth:`_CachyCache.call`.
+
+Each function gets its own sqlite file ``{cache_dir}/{function_name}_cache.sqlite``
+containing a payload table (named after the function) and, when ``cache_life`` or
+``max_cache_size`` is used, a ``{function_name}_metadata`` table.
+"""
+
+from typing import Any, Callable, Dict, Optional, Union
 from functools import wraps
 from pathlib import Path
 from datetime import timedelta
@@ -15,6 +35,10 @@ from sqlitedict import SqliteDict
 from . import __application_name__, __author__, get_dls_sha512
 
 log = getLogger(__name__)
+
+# Sentinel returned by the in-memory read to mean "not found" -- distinct from a
+# legitimately cached ``None`` value, which must be treated as a hit.
+_MISS = object()
 
 
 class CacheReadError(Exception):
@@ -89,9 +113,10 @@ class CachyDBDict(SqliteDict):
 
 def cachy_compress(data: Any) -> bytes:
     """
-    Compress the data using gzip and pickle.
-    :param data:
-    :return:
+    Serialize and (optionally) compress a value for storage, using pickle + lzma.
+
+    :param data: the value to store
+    :return: the compressed payload bytes (or the value unchanged if compression is disabled)
     """
     if USE_COMPRESSION:
         p = pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)
@@ -104,6 +129,13 @@ def cachy_compress(data: Any) -> bytes:
 
 
 def cachy_decompress(data: bytes) -> Any:
+    """
+    Reverse :func:`cachy_compress`: decompress and unpickle a stored payload.
+
+    :param data: the payload bytes read from the cache
+    :return: the original value
+    :raises CacheReadError: if the payload cannot be decompressed/unpickled (corruption or transient OOM)
+    """
     if not USE_COMPRESSION:
         return data
     try:
@@ -121,6 +153,306 @@ def get_cache_dir() -> Path:
     return cache_dir
 
 
+class _CachyCache:
+    """
+    Holds one decorated function's cache configuration and implements the
+    read / compute / write / evict logic.
+
+    A single instance is created per decorated function (at decoration time);
+    the wrapper returned by :func:`cachy` simply forwards each call to
+    :meth:`call`. Methods are intentionally small and single-purpose so the
+    overall flow in :meth:`call` reads as a high-level outline.
+    """
+
+    # Bound the metadata read/expire retry loop so a persistently locked db can
+    # never hang the caller (lock contention is expected across processes).
+    METADATA_RETRY_LIMIT = 100
+    # Bound the LRU eviction loop so a problem accessing the file cannot spin forever.
+    EVICTION_ATTEMPT_LIMIT = 10
+
+    def __init__(
+        self,
+        func: Callable,
+        cache_dir: Path,
+        cache_life: Optional[timedelta],
+        cache_none: bool,
+        in_memory: bool,
+        max_cache_size: Union[int, Callable, None],
+    ):
+        self.func = func
+        self.function_name = func.__name__
+        self.cache_life = cache_life
+        self.cache_none = cache_none
+        self.in_memory = in_memory
+        self.max_cache_size = max_cache_size
+
+        self.cache_file_path = Path(cache_dir, f"{self.function_name}_cache.sqlite")
+        self.payload_table = self.function_name
+        self.metadata_table = f"{self.function_name}_metadata"
+        # Stores the same compressed payload bytes as the file cache, for fast reads.
+        self.in_memory_cache: Dict[str, bytes] = {}
+
+    # -- public entry point ------------------------------------------------
+
+    def call(self, args: tuple, kwargs: dict) -> Any:
+        """Return the cached result for ``(args, kwargs)``, computing and caching it on a miss."""
+        key = self._key(args, kwargs)
+        self._ensure_cache_dir()
+
+        # Expire a stale entry and/or refresh its LRU read time before reading.
+        if self._uses_metadata:
+            self._expire_and_touch(key)
+
+        result = self._read_memory(key)
+        cache_write = False
+        if result is _MISS:
+            result, cache_write = self._read_file_or_compute(key, args, kwargs)
+
+        # Record the write time so future calls can expire / LRU-evict the entry.
+        if cache_write and self._uses_metadata:
+            self._record_write(key)
+
+        # Keep the on-disk cache within its size budget.
+        if cache_write and self.max_cache_size is not None:
+            self._evict_to_size()
+
+        return result
+
+    # -- configuration helpers --------------------------------------------
+
+    @property
+    def _uses_metadata(self) -> bool:
+        """True when a metadata table is needed (for expiry and/or LRU eviction)."""
+        return self.cache_life is not None or self.max_cache_size is not None
+
+    @staticmethod
+    def _key(args: tuple, kwargs: dict) -> str:
+        """Build a stable cache key from the call arguments via hashy's dict/list/set hashing."""
+        return get_dls_sha512([get_dls_sha512(list(args)), get_dls_sha512(kwargs)])
+
+    def _ensure_cache_dir(self) -> None:
+        """Create the cache directory if it does not already exist."""
+        try:
+            self.cache_file_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            log.info(f'Error creating cache directory: "{e}"')
+
+    def _payload_db(self) -> CachyDBDict:
+        """Open the payload table (use as a context manager)."""
+        return CachyDBDict(self.cache_file_path, self.payload_table)
+
+    def _metadata_db(self) -> CachyDBDict:
+        """Open the metadata table (use as a context manager)."""
+        return CachyDBDict(self.cache_file_path, self.metadata_table)
+
+    # -- sqlite resiliency helpers ----------------------------------------
+
+    def _locked_note(self, what: str) -> str:
+        """Standard log message for an operation that failed because the db is (expectedly) locked."""
+        return f'{what} for "{self.function_name}", probably because "{self.cache_file_path}" is locked. This is expected if multiple processes are using the cache.'
+
+    def _commit(self, db: CachyDBDict, what: str) -> None:
+        """Commit ``db``, swallowing the OperationalError raised when the db is locked."""
+        try:
+            db.commit()
+        except sqlite3.OperationalError:
+            log.info(self._locked_note(what))
+
+    # -- expiry + LRU read-time refresh -----------------------------------
+
+    def _expire_and_touch(self, key: str) -> None:
+        """
+        Drop ``key`` if it has expired, and refresh its LRU read time.
+
+        Runs inside a retry loop because the metadata table may be transiently
+        locked by another process; lock contention is expected, not an error.
+        """
+        write_ok = False
+        countdown = self.METADATA_RETRY_LIMIT
+        while not write_ok and countdown > 0:
+            try:
+                with self._metadata_db() as metadata_db:
+                    self._expire_and_touch_once(metadata_db, key)
+                write_ok = True
+            except sqlite3.OperationalError:
+                log.debug(self._locked_note("Error accessing cache"))
+                time.sleep((0.01 * random.random()) + 0.01)
+            countdown -= 1
+        if not write_ok:
+            log.warning(f'Error accessing cache for "{self.function_name}", probably because "{self.cache_file_path}" is locked.')
+
+    def _expire_and_touch_once(self, metadata_db: CachyDBDict, key: str) -> None:
+        """One attempt at the expire + LRU-touch logic (see :meth:`_expire_and_touch`)."""
+        if key in metadata_db:
+            try:
+                row_metadata = metadata_db[key]
+            except (KeyError, TypeError):
+                # can happen if the cache is in an old/incompatible format
+                row_metadata = CacheMetadata()
+            write_ts = row_metadata.write_timestamp
+        else:
+            row_metadata = None
+            write_ts = 0.0  # force a cache miss
+
+        if self.cache_life is not None and time.time() - write_ts >= self.cache_life.total_seconds():
+            self._expire_entry(metadata_db, key)
+
+        # Refresh the LRU read time on access (only relevant when size-bounded).
+        if self.max_cache_size is not None and key in metadata_db:
+            row_metadata.read_timestamp = time.time()
+            metadata_db[key] = row_metadata
+            metadata_db.commit()
+
+    def _expire_entry(self, metadata_db: CachyDBDict, key: str) -> None:
+        """Delete an expired entry's metadata and payload."""
+        if key in metadata_db:
+            _cache_counters.cache_expired_counter += 1
+            del metadata_db[key]
+            metadata_db.commit()
+        with self._payload_db() as db:
+            if key in db:
+                del db[key]
+                db.commit()
+
+    # -- reads -------------------------------------------------------------
+
+    def _read_memory(self, key: str) -> Any:
+        """
+        Read from the in-memory cache.
+
+        :return: the cached value (which may legitimately be ``None``) on a hit,
+            or :data:`_MISS` when in-memory caching is off, the key is absent, or
+            the stored entry is unreadable (in which case it is discarded).
+        """
+        if not (self.in_memory and key in self.in_memory_cache):
+            return _MISS
+        try:
+            result = cachy_decompress(self.in_memory_cache[key])
+        except CacheReadError as e:
+            log.warning(f'Discarding unreadable in-memory cache entry for "{self.function_name}": {e}')
+            self.in_memory_cache.pop(key, None)
+            return _MISS
+        _cache_counters.cache_memory_hit_counter += 1
+        _cache_counters.cache_hit_counter += 1
+        return result
+
+    def _read_file_or_compute(self, key: str, args: tuple, kwargs: dict) -> tuple:
+        """
+        Read from the file cache, or recompute and store on a miss.
+
+        :return: ``(result, cache_write)`` where ``cache_write`` is True when the
+            value was (re)computed and written (so the caller updates metadata / evicts).
+        """
+        with self._payload_db() as db:
+            if key in db:
+                try:
+                    result = cachy_decompress(db[key])
+                    _cache_counters.cache_hit_counter += 1
+                    return result, False
+                except CacheReadError as e:
+                    # unreadable entry (transient OOM or corruption) -> drop it, treat as miss
+                    log.warning(f'Discarding unreadable cache entry for "{self.function_name}": {e}')
+                    self._discard_payload(db, key)
+
+            # miss (genuine, or just-discarded bad entry) - recompute
+            _cache_counters.cache_miss_counter += 1
+            result = self.func(*args, **kwargs)
+            self._store(db, key, result)
+            return result, True
+
+    def _discard_payload(self, db: CachyDBDict, key: str) -> None:
+        """Best-effort removal of an unreadable payload entry."""
+        try:
+            del db[key]
+            db.commit()
+        except (KeyError, sqlite3.OperationalError):
+            pass
+
+    # -- writes ------------------------------------------------------------
+
+    def _store(self, db: CachyDBDict, key: str, result: Any) -> None:
+        """
+        Store ``result`` in the file cache and, if enabled, the in-memory cache.
+
+        ``None`` results are only stored when ``cache_none`` is True; this gate
+        applies to both caches so the in-memory cache honors ``cache_none`` the
+        same way the file cache does.
+        """
+        if result is None and not self.cache_none:
+            return
+        cached_result = cachy_compress(result)
+        db[key] = cached_result
+        self._commit(db, "Commit failed")
+        if self.in_memory:
+            self.in_memory_cache[key] = cached_result
+
+    def _record_write(self, key: str) -> None:
+        """Record the write timestamp for ``key`` (used by expiry and LRU eviction)."""
+        with self._metadata_db() as metadata_db:
+            metadata_db[key] = CacheMetadata()
+            self._commit(metadata_db, "Commit failed")
+
+    # -- LRU eviction ------------------------------------------------------
+
+    def _evict_to_size(self) -> None:
+        """Evict least-recently-used entries until the cache file is within ``max_cache_size`` bytes."""
+        max_cache_size = self.max_cache_size
+        if max_cache_size is None:
+            return
+        # max_cache_size may be an int or a callable that returns the limit (or None for "no limit").
+        max_size = max_cache_size if isinstance(max_cache_size, int) else max_cache_size()
+        if max_size is None:
+            return
+        attempts = 0
+        while self.cache_file_path.stat().st_size > max_size and attempts < self.EVICTION_ATTEMPT_LIMIT:
+            self._evict_oldest()
+            self._vacuum()  # shrink the file; sqlite does not do this automatically
+            attempts += 1
+        if attempts >= self.EVICTION_ATTEMPT_LIMIT:
+            log.info(f'Eviction attempt limit reached (eviction_attempt_limit={self.EVICTION_ATTEMPT_LIMIT}) for "{self.function_name}" in "{self.cache_file_path}"')
+
+    def _evict_oldest(self) -> None:
+        """Remove the single least-recently-read entry from the metadata, payload, and in-memory caches."""
+        with self._metadata_db() as metadata_db:
+            oldest_key = self._find_oldest(metadata_db)
+            if oldest_key is None:
+                return
+            del metadata_db[oldest_key]
+            metadata_db.commit()
+            with self._payload_db() as db:
+                try:
+                    del db[oldest_key]
+                    db.commit()
+                except KeyError:
+                    log.info(f'Key "{oldest_key}" not found in cache for "{self.function_name}". This is unexpected.')
+            if self.in_memory:
+                try:
+                    del self.in_memory_cache[oldest_key]
+                except KeyError:
+                    log.info(f'Key "{oldest_key}" not found in in-memory cache for "{self.function_name}". This is unexpected.')
+            _cache_counters.cache_eviction_counter += 1
+
+    @staticmethod
+    def _find_oldest(metadata_db: CachyDBDict) -> Optional[str]:
+        """Return the key with the oldest read timestamp, or None if the metadata table is empty."""
+        oldest_key = None
+        oldest_read_timestamp = None
+        for k, ts in metadata_db.items():
+            if oldest_read_timestamp is None or ts.read_timestamp < oldest_read_timestamp:
+                oldest_key = k
+                oldest_read_timestamp = ts.read_timestamp
+        return oldest_key
+
+    def _vacuum(self) -> None:
+        """VACUUM the sqlite file so freed space is returned to the filesystem."""
+        try:
+            with sqlite3.connect(self.cache_file_path) as conn:
+                conn.execute("VACUUM")  # shrinks freelist back into the file
+                conn.commit()
+        except sqlite3.OperationalError:
+            log.info(self._locked_note("VACUUM failed"))
+
+
 def cachy(
     cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache_dir(), cache_none: bool = False, in_memory: bool = False, max_cache_size: int | Callable | None = None
 ) -> Callable:
@@ -134,170 +466,11 @@ def cachy(
     """
 
     def decorator(func: Callable) -> Callable:
-
-        function_name = func.__name__
-        in_memory_cache: Dict[str, Any] = {}
-
-        # Create a cache file path based on the function name
-        cache_file_path = Path(cache_dir, f"{function_name}_cache.sqlite")
+        cache = _CachyCache(func, cache_dir, cache_life, cache_none, in_memory, max_cache_size)
 
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
-
-            key = get_dls_sha512([get_dls_sha512(list(args)), get_dls_sha512(kwargs)])
-
-            try:
-                cache_file_path.parent.mkdir(parents=True, exist_ok=True)
-            except OSError as e:
-                log.info(f'Error creating cache directory: "{e}"')
-
-            metadata_table_name = f"{function_name}_metadata"
-
-            # If an entry has expired, delete it from the cache. Also updates the read time.
-            # Keep the metadata in a separate table so that when we update the metadata, we don't have to write the payload (since we're using SqliteDict, we have to write the entire row).
-            # If cache life is None (infinite), we don't need to check for expiration.
-            if cache_life is not None or max_cache_size is not None:
-                write_ok = False
-                write_loop_count_down = 100
-                while not write_ok and write_loop_count_down > 0:
-                    try:
-                        with CachyDBDict(cache_file_path, metadata_table_name) as metadata_db:
-                            if key in metadata_db:
-                                try:
-                                    row_metadata = metadata_db[key]
-                                except (KeyError, TypeError):
-                                    # can happen if the cache is an old format
-                                    row_metadata = CacheMetadata()
-                                write_ts = row_metadata.write_timestamp
-                            else:
-                                write_ts = 0.0  # force a cache miss
-                            if cache_life is not None and time.time() - write_ts >= cache_life.total_seconds():
-                                # entry has expired
-                                if key in metadata_db:
-                                    _cache_counters.cache_expired_counter += 1
-                                    del metadata_db[key]
-                                    metadata_db.commit()
-                                with CachyDBDict(cache_file_path, function_name) as db:
-                                    if key in db:
-                                        del db[key]
-                                        db.commit()
-                            if max_cache_size is not None and key in metadata_db:
-                                # update read time
-                                row_metadata.read_timestamp = time.time()
-                                metadata_db[key] = row_metadata
-                                metadata_db.commit()
-                        write_ok = True
-                    except sqlite3.OperationalError:
-                        log.debug(f'Error accessing cache for "{function_name}", probably because "{cache_file_path}" is locked. This is expected if multiple processes are using the cache.')
-                        time.sleep((0.01 * random.random()) + 0.01)
-                    write_loop_count_down -= 1
-                if not write_ok:
-                    log.warning(f'Error accessing cache for "{function_name}", probably because "{cache_file_path}" is locked.')
-
-            result = None
-
-            # use in-memory cache, if enabled
-            if in_memory and key in in_memory_cache:
-                try:
-                    result = cachy_decompress(in_memory_cache[key])
-                    _cache_counters.cache_memory_hit_counter += 1
-                    _cache_counters.cache_hit_counter += 1
-                except CacheReadError as e:
-                    log.warning(f'Discarding unreadable in-memory cache entry for "{function_name}": {e}')
-                    in_memory_cache.pop(key, None)
-                    result = None  # leaves result None -> falls through to the file/recompute path below
-
-            cache_write = False
-            if result is None:
-                # Entry not in memory cache. Try file-based cache.
-                with CachyDBDict(cache_file_path, function_name) as db:
-                    is_hit = False
-                    if key in db:
-                        try:
-                            result = cachy_decompress(db[key])
-                            is_hit = True
-                        except CacheReadError as e:
-                            # unreadable entry (transient OOM or corruption) -> drop it, treat as miss
-                            log.warning(f'Discarding unreadable cache entry for "{function_name}": {e}')
-                            try:
-                                del db[key]
-                                db.commit()
-                            except (KeyError, sqlite3.OperationalError):
-                                pass
-
-                    if is_hit:
-                        _cache_counters.cache_hit_counter += 1
-                    else:
-                        # miss (genuine, or just-discarded bad entry) - recompute
-                        _cache_counters.cache_miss_counter += 1
-                        result = func(*args, **kwargs)
-                        cached_result = cachy_compress(result)
-                        if result is not None or cache_none:
-                            db[key] = cached_result
-                            try:
-                                db.commit()
-                            except sqlite3.OperationalError:
-                                log.info(f'Commit failed for "{function_name}", probably because "{cache_file_path}" is locked. This is expected if multiple processes are using the cache.')
-                        if in_memory:
-                            in_memory_cache[key] = cached_result
-                        cache_write = True
-
-            # update write timestamp (for both cache_life and LRU cache's max_cache_size)
-            if cache_write and (cache_life is not None or max_cache_size is not None):
-                with CachyDBDict(cache_file_path, metadata_table_name) as metadata_db:
-                    metadata_db[key] = CacheMetadata()
-                    try:
-                        metadata_db.commit()
-                    except sqlite3.OperationalError:
-                        log.info(f'Commit failed for "{function_name}", probably because "{cache_file_path}" is locked. This is expected if multiple processes are using the cache.')
-
-            # LRU cache
-            if cache_write and max_cache_size is not None:
-                if isinstance(max_cache_size, int):
-                    _max_cache_size = max_cache_size
-                else:
-                    # if max_cache_size is a callable, call it to get the value to use
-                    _max_cache_size = max_cache_size()
-                eviction_attempt_count = 0  # to avoid infinite loop if we have a problem accessing the cache file
-                eviction_attempt_limit = 10
-                while _max_cache_size is not None and cache_file_path.stat().st_size > _max_cache_size and eviction_attempt_count < eviction_attempt_limit:
-                    # remove the least recently used entry
-                    with CachyDBDict(cache_file_path, metadata_table_name) as metadata_db:
-                        oldest_key = None
-                        oldest_read_timestamp = None
-                        for k, ts in metadata_db.items():
-                            if oldest_read_timestamp is None or ts.read_timestamp < oldest_read_timestamp:
-                                oldest_key = k
-                                oldest_read_timestamp = ts.read_timestamp
-                        if oldest_key is not None:
-                            del metadata_db[oldest_key]
-                            metadata_db.commit()
-                            with CachyDBDict(cache_file_path, function_name) as db:
-                                try:
-                                    del db[oldest_key]
-                                    db.commit()
-                                except KeyError:
-                                    log.info(f'Key "{oldest_key}" not found in cache for "{function_name}". This is unexpected.')
-                            if in_memory:
-                                try:
-                                    del in_memory_cache[oldest_key]
-                                except KeyError:
-                                    log.info(f'Key "{oldest_key}" not found in in-memory cache for "{function_name}". This is unexpected.')
-                            _cache_counters.cache_eviction_counter += 1
-
-                    # shrink the database file (this does not happen automatically)
-                    try:
-                        with sqlite3.connect(cache_file_path) as conn:
-                            conn.execute("VACUUM")  # shrinks freelist back into the file
-                            conn.commit()
-                    except sqlite3.OperationalError:
-                        log.info(f'VACUUM failed for "{function_name}", probably because "{cache_file_path}" is locked. This is expected if multiple processes are using the cache.')
-
-                    eviction_attempt_count += 1
-                if eviction_attempt_count >= eviction_attempt_limit:
-                    log.info(f'Eviction attempt limit reached ({eviction_attempt_limit=}) for "{function_name}" in "{cache_file_path}"')
-
-            return result
+            return cache.call(args, kwargs)
 
         return wrapper
 

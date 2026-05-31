@@ -1,30 +1,34 @@
+"""
+Conventional md5/sha256/sha512 hashes for files.
+
+Files are read and hashed in fixed-size chunks (see ``_hash_core.hash_stream``)
+so that memory use stays constant regardless of file size. The resulting digests
+match those from any standard tool for the same file contents.
+"""
+
 from pathlib import Path
 import hashlib
-from typing import Union
+from typing import Callable, Union
+
+from ._hash_core import hash_stream
 
 
 def get_file_md5(file_path: Union[Path, str]) -> str:
-    return _get_file_hash(file_path, hashlib.md5)
+    """Return the md5 hex digest of the file at ``file_path``."""
+    return _hash_file(file_path, hashlib.md5)
 
 
 def get_file_sha256(file_path: Union[Path, str]) -> str:
-    return _get_file_hash(file_path, hashlib.sha256)
+    """Return the sha256 hex digest of the file at ``file_path``."""
+    return _hash_file(file_path, hashlib.sha256)
 
 
 def get_file_sha512(file_path: Union[Path, str]) -> str:
-    return _get_file_hash(file_path, hashlib.sha512)
+    """Return the sha512 hex digest of the file at ``file_path``."""
+    return _hash_file(file_path, hashlib.sha512)
 
 
-def _get_file_hash(file_path: Union[Path, str], hash_function) -> str:
-    hash_object = hash_function()
-
-    bucket_size = 4096  # for speed
+def _hash_file(file_path: Union[Path, str], hash_function: Callable) -> str:
+    """Open ``file_path`` in binary mode and hash its contents with ``hash_function``."""
     with open(file_path, "rb") as f:
-        val = f.read(bucket_size)
-        while len(val) > 0:
-            hash_object.update(val)
-            val = f.read(bucket_size)
-
-        hash_str = hash_object.hexdigest().lower()
-
-    return hash_str
+        return hash_stream(f, hash_function)
