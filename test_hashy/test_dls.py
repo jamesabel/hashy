@@ -3,6 +3,8 @@ from enum import Enum
 import json
 from decimal import Decimal
 
+import pytest
+
 from hashy import dls_sort, get_dls_md5, get_dls_sha256, get_dls_sha512, json_dumps
 
 
@@ -45,6 +47,15 @@ def test_decimal():
     # doesn't work well for numbers not representable in float point, but integers and some floating point are OK
     d = {"i": Decimal(2), "f": Decimal(1.5)}
     assert json_dumps(dls_sort(d)) == '{"f":1.5,"i":2}'
+
+
+def test_convert_serializable_unsupported_type_raises():
+    # A type that is neither natively json-serializable nor a handled special case (Enum/Decimal) should raise.
+    class NotSerializable:
+        pass
+
+    with pytest.raises(NotImplementedError):
+        json_dumps({"x": NotSerializable()})
 
 
 def test_set_sort():
