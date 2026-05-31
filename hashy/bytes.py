@@ -1,21 +1,20 @@
-from typing import Callable
+"""Conventional md5/sha256/sha512 hashes for in-memory ``bytes`` objects."""
+
 import hashlib
 
-
-def _get_bytes_hash(b: bytes, hash_function: Callable) -> str:
-    hash_object = hash_function()
-    hash_object.update(b)
-    hash_str = hash_object.hexdigest().lower()
-    return hash_str
+from ._hash_core import hash_bytes
 
 
 def get_bytes_md5(b: bytes) -> str:
-    return _get_bytes_hash(b, hashlib.md5)
+    """Return the md5 hex digest of ``b``."""
+    return hash_bytes(b, hashlib.md5)
 
 
 def get_bytes_sha256(b: bytes) -> str:
-    return _get_bytes_hash(b, hashlib.sha256)
+    """Return the sha256 hex digest of ``b``."""
+    return hash_bytes(b, hashlib.sha256)
 
 
 def get_bytes_sha512(b: bytes) -> str:
-    return _get_bytes_hash(b, hashlib.sha512)
+    """Return the sha512 hex digest of ``b``."""
+    return hash_bytes(b, hashlib.sha512)

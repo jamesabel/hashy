@@ -1,21 +1,25 @@
-from typing import Callable
+"""
+Conventional md5/sha256/sha512 hashes for strings.
+
+The string is UTF-8 encoded before hashing, so these digests match those from
+any standard tool (e.g. an online hash calculator) for the same text.
+"""
+
 import hashlib
 
-
-def _get_string_hash(s: str, hash_function: Callable) -> str:
-    hash_object = hash_function()
-    hash_object.update(s.encode())
-    hash_str = hash_object.hexdigest().lower()
-    return hash_str
+from ._hash_core import hash_bytes
 
 
 def get_string_md5(s: str) -> str:
-    return _get_string_hash(s, hashlib.md5)
+    """Return the md5 hex digest of ``s`` (UTF-8 encoded)."""
+    return hash_bytes(s.encode(), hashlib.md5)
 
 
 def get_string_sha256(s: str) -> str:
-    return _get_string_hash(s, hashlib.sha256)
+    """Return the sha256 hex digest of ``s`` (UTF-8 encoded)."""
+    return hash_bytes(s.encode(), hashlib.sha256)
 
 
 def get_string_sha512(s: str) -> str:
-    return _get_string_hash(s, hashlib.sha512)
+    """Return the sha512 hex digest of ``s`` (UTF-8 encoded)."""
+    return hash_bytes(s.encode(), hashlib.sha512)
