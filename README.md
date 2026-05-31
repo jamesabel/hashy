@@ -1,5 +1,13 @@
 # hashy
 
+[![CI](https://github.com/jamesabel/hashy/actions/workflows/python-package.yml/badge.svg)](https://github.com/jamesabel/hashy/actions/workflows/python-package.yml)
+[![codecov](https://codecov.io/gh/jamesabel/hashy/branch/master/graph/badge.svg)](https://codecov.io/gh/jamesabel/hashy)
+[![PyPI version](https://img.shields.io/pypi/v/hashy.svg)](https://pypi.org/project/hashy/)
+[![Python versions](https://img.shields.io/pypi/pyversions/hashy.svg)](https://pypi.org/project/hashy/)
+[![Downloads](https://img.shields.io/pypi/dm/hashy.svg)](https://pypi.org/project/hashy/)
+[![License: MIT](https://img.shields.io/pypi/l/hashy.svg)](https://github.com/jamesabel/hashy/blob/master/LICENSE)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 Another hash library, but with a twist. It provides a simple interface to generate hashes for strings, files, dicts, 
 lists and sets. It also provides a decorator to cache the results of a function to disk and (optionally) memory.
 
