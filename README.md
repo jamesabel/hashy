@@ -3,7 +3,7 @@
 [![CI](https://github.com/jamesabel/hashy/actions/workflows/python-package.yml/badge.svg)](https://github.com/jamesabel/hashy/actions/workflows/python-package.yml)
 [![codecov](https://codecov.io/gh/jamesabel/hashy/branch/master/graph/badge.svg)](https://codecov.io/gh/jamesabel/hashy)
 [![PyPI version](https://img.shields.io/pypi/v/hashy.svg)](https://pypi.org/project/hashy/)
-[![Python versions](https://img.shields.io/pypi/pyversions/hashy.svg)](https://pypi.org/project/hashy/)
+[![Python versions](https://img.shields.io/pypi/pyversions/hashy?cacheSeconds=3600)](https://pypi.org/project/hashy/)
 [![Downloads](https://img.shields.io/pypi/dm/hashy.svg)](https://pypi.org/project/hashy/)
 [![License: MIT](https://img.shields.io/pypi/l/hashy.svg)](https://github.com/jamesabel/hashy/blob/master/LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
