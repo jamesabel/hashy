@@ -35,6 +35,63 @@ def test_a_cachy_zero_life():
     assert get_counters() == CacheCounters(cache_memory_hit_counter=0, cache_hit_counter=0, cache_miss_counter=2, cache_expired_counter=1, cache_eviction_counter=0)
 
 
+def test_cachy_callable_cache_life():
+
+    clear_counters()
+
+    # cache_life is resolved live on each call, so changing the global afterward takes effect
+    current_cache_life = {"value": timedelta(days=1)}
+
+    @cachy(lambda: current_cache_life["value"], get_cache_directory())
+    def cachy_callable_life_func(p):
+        return p
+
+    func = cachy_callable_life_func
+    # delete the DB so the cache counts are correct
+    for stale in get_cache_directory().glob("cachy_callable_life_func*"):
+        stale.unlink(missing_ok=True)
+
+    # first call misses and caches
+    assert func(1) == 1
+    assert get_counters() == CacheCounters(cache_memory_hit_counter=0, cache_hit_counter=0, cache_miss_counter=1, cache_expired_counter=0, cache_eviction_counter=0)
+    # still fresh under the long life -> hit
+    assert func(1) == 1
+    assert get_counters() == CacheCounters(cache_memory_hit_counter=0, cache_hit_counter=1, cache_miss_counter=1, cache_expired_counter=0, cache_eviction_counter=0)
+
+    # shrink the life to zero -> the next call re-reads the callable and expires the entry
+    current_cache_life["value"] = timedelta(seconds=0)
+    assert func(1) == 1
+    assert get_counters() == CacheCounters(cache_memory_hit_counter=0, cache_hit_counter=1, cache_miss_counter=2, cache_expired_counter=1, cache_eviction_counter=0)
+
+
+def test_cachy_in_memory_expiry():
+
+    clear_counters()
+
+    current_cache_life = {"value": timedelta(days=1)}
+
+    @cachy(lambda: current_cache_life["value"], get_cache_directory(), in_memory=True)
+    def cachy_in_memory_expiry_func(p):
+        return p
+
+    func = cachy_in_memory_expiry_func
+    # delete the DB so the cache counts are correct
+    for stale in get_cache_directory().glob("cachy_in_memory_expiry_func*"):
+        stale.unlink(missing_ok=True)
+
+    # first call misses and caches (in memory + on disk)
+    assert func(1) == 1
+    assert get_counters() == CacheCounters(cache_memory_hit_counter=0, cache_hit_counter=0, cache_miss_counter=1, cache_expired_counter=0, cache_eviction_counter=0)
+    # still fresh -> in-memory hit
+    assert func(1) == 1
+    assert get_counters() == CacheCounters(cache_memory_hit_counter=1, cache_hit_counter=1, cache_miss_counter=1, cache_expired_counter=0, cache_eviction_counter=0)
+
+    # shrink the life to zero -> expiry must evict the in-memory copy too, so the next call is a miss
+    current_cache_life["value"] = timedelta(seconds=0)
+    assert func(1) == 1
+    assert get_counters() == CacheCounters(cache_memory_hit_counter=1, cache_hit_counter=1, cache_miss_counter=2, cache_expired_counter=1, cache_eviction_counter=0)
+
+
 def test_cachy_simple():
 
     @cachy(cache_life, get_cache_directory())

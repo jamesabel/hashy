@@ -174,7 +174,7 @@ class _CachyCache:
         self,
         func: Callable,
         cache_dir: Path,
-        cache_life: Optional[timedelta],
+        cache_life: Union[timedelta, Callable[[], Optional[timedelta]], None],
         cache_none: bool,
         in_memory: bool,
         max_cache_size: Union[int, Callable, None],
@@ -294,7 +294,8 @@ class _CachyCache:
             row_metadata = None
             write_ts = 0.0  # force a cache miss
 
-        if self.cache_life is not None and time.time() - write_ts >= self.cache_life.total_seconds():
+        cache_life = self.cache_life() if callable(self.cache_life) else self.cache_life
+        if cache_life is not None and time.time() - write_ts >= cache_life.total_seconds():
             self._expire_entry(metadata_db, key)
 
         # Refresh the LRU read time on access (only relevant when size-bounded).
@@ -304,7 +305,7 @@ class _CachyCache:
             metadata_db.commit()
 
     def _expire_entry(self, metadata_db: CachyDBDict, key: str) -> None:
-        """Delete an expired entry's metadata and payload."""
+        """Delete an expired entry's metadata, payload, and in-memory copy."""
         if key in metadata_db:
             _cache_counters.cache_expired_counter += 1
             del metadata_db[key]
@@ -313,6 +314,9 @@ class _CachyCache:
             if key in db:
                 del db[key]
                 db.commit()
+        # Drop the in-memory copy too, otherwise _read_memory would serve the expired value.
+        if self.in_memory:
+            self.in_memory_cache.pop(key, None)
 
     # -- reads -------------------------------------------------------------
 
@@ -454,11 +458,15 @@ class _CachyCache:
 
 
 def cachy(
-    cache_life: Union[timedelta, None] = None, cache_dir: Path = get_cache_dir(), cache_none: bool = False, in_memory: bool = False, max_cache_size: int | Callable | None = None
+    cache_life: Union[timedelta, Callable[[], Optional[timedelta]], None] = None,
+    cache_dir: Path = get_cache_dir(),
+    cache_none: bool = False,
+    in_memory: bool = False,
+    max_cache_size: int | Callable | None = None,
 ) -> Callable:
     """
     Decorator to persistently cache the results of a function call, with a cache life.
-    :param cache_life: Cache life.
+    :param cache_life: Cache life, as a timedelta or a callable returning the current timedelta (resolved live on each call) or None.
     :param cache_dir: Cache directory.
     :param cache_none: Cache None results (default is to not cache None results).
     :param in_memory: If True, use an in-memory cache for reads (default is to only use a file-based cache).
