@@ -23,6 +23,7 @@ from functools import wraps
 from pathlib import Path
 from datetime import timedelta
 from logging import getLogger
+import inspect
 import time
 import sqlite3
 import pickle
@@ -181,6 +182,14 @@ class _CachyCache:
     ):
         self.func = func
         self.function_name = func.__name__
+        # Used to resolve default argument values when building the cache key, so a
+        # call relying on a default keys the same as one passing that value explicitly.
+        try:
+            self.signature: Optional[inspect.Signature] = inspect.signature(func)
+        except (ValueError, TypeError):
+            # Some callables (e.g. certain builtins) expose no signature; fall back to
+            # keying on the explicitly-passed arguments only.
+            self.signature = None
         self.cache_life = cache_life
         self.cache_none = cache_none
         self.in_memory = in_memory
@@ -225,10 +234,35 @@ class _CachyCache:
         """True when a metadata table is needed (for expiry and/or LRU eviction)."""
         return self.cache_life is not None or self.max_cache_size is not None
 
-    @staticmethod
-    def _key(args: tuple, kwargs: dict) -> str:
-        """Build a stable cache key from the call arguments via hashy's dict/list/set hashing."""
+    def _key(self, args: tuple, kwargs: dict) -> str:
+        """
+        Build a stable cache key from the call arguments via hashy's dict/list/set hashing.
+
+        Default argument values are resolved from the function signature first, so a
+        call that relies on a default participates in the key the same way an explicit
+        value would. Without this, defaults never appear in ``args``/``kwargs`` and two
+        calls with different effective defaults would collide on the same (empty) key.
+        """
+        args, kwargs = self._resolve_defaults(args, kwargs)
         return get_dls_sha512([get_dls_sha512(list(args)), get_dls_sha512(kwargs)])
+
+    def _resolve_defaults(self, args: tuple, kwargs: dict) -> tuple:
+        """
+        Normalize ``(args, kwargs)`` by filling in the function's default values.
+
+        Returns the bound positional/keyword arguments with defaults applied. If the
+        function has no introspectable signature, or the call does not match it, the
+        original ``args``/``kwargs`` are returned unchanged.
+        """
+        if self.signature is None:
+            return args, kwargs
+        try:
+            bound = self.signature.bind(*args, **kwargs)
+        except TypeError:
+            # Arguments don't fit the signature; let the real call raise and key as-is.
+            return args, kwargs
+        bound.apply_defaults()
+        return bound.args, bound.kwargs
 
     def _ensure_cache_dir(self) -> None:
         """Create the cache directory if it does not already exist."""
