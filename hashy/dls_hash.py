@@ -1,6 +1,7 @@
 import copy
 from collections import OrderedDict
 from typing import Callable, Union, Any
+from pathlib import Path
 
 from hashy import get_string_md5, get_string_sha256, get_string_sha512
 
@@ -33,6 +34,8 @@ def convert_serializable_special_cases(o) -> Union[str, int, float]:
         else:
             # not representable with an integer so use a float
             serializable_representation = float(o)
+    elif isinstance(o, Path):
+        serializable_representation = str(o)
     else:
         raise NotImplementedError(f"can not serialize {o} since type={type(o)}")
     return serializable_representation
