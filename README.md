@@ -19,10 +19,13 @@ pip install hashy
 
 ## Introduction
 
-hashy provides an md5, sha256 or sha512 for string, file, dict, list and set.
+hashy provides an md5, sha256, sha512 or crc64nvme for string, file, dict, list and set.
 
 String and file hashes are conventional and can be compared to other implementations. For example,
 you can go to an online hash calculator for "a" and get the same hash as hashy generates.
+
+crc64nvme is the CRC-64/NVME checksum (as used by the NVMe specification and AWS S3 object
+integrity checking), returned as a 16-character hex string.
 
 Hashes for complex data types like dict, list and set are specific to hashy.
 

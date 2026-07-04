@@ -3,7 +3,7 @@ from collections import OrderedDict
 from typing import Callable, Union, Any
 from pathlib import Path
 
-from hashy import get_string_md5, get_string_sha256, get_string_sha512
+from hashy import get_string_md5, get_string_sha256, get_string_sha512, get_string_crc64nvme
 
 
 import json
@@ -103,3 +103,12 @@ def get_dls_sha512(dl: Union[dict, OrderedDict, list, set]) -> str:
     :return: sha512 hash string corresponding to the dl input
     """
     return _dls_hash(dl, get_string_sha512)
+
+
+def get_dls_crc64nvme(dl: Union[dict, OrderedDict, list, set]) -> str:
+    """
+    Given a possibly unordered nested dictionary, set or list, return a consistent hash of it.
+    :param dl: dist or list
+    :return: CRC-64/NVME hash string corresponding to the dl input
+    """
+    return _dls_hash(dl, get_string_crc64nvme)
