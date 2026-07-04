@@ -1,5 +1,5 @@
 """
-Conventional md5/sha256/sha512 hashes for strings.
+Conventional md5/sha256/sha512/crc64nvme hashes for strings.
 
 The string is UTF-8 encoded before hashing, so these digests match those from
 any standard tool (e.g. an online hash calculator) for the same text.
@@ -7,6 +7,7 @@ any standard tool (e.g. an online hash calculator) for the same text.
 
 import hashlib
 
+from ._crc64nvme import Crc64Nvme
 from ._hash_core import hash_bytes
 
 
@@ -23,3 +24,8 @@ def get_string_sha256(s: str) -> str:
 def get_string_sha512(s: str) -> str:
     """Return the sha512 hex digest of ``s`` (UTF-8 encoded)."""
     return hash_bytes(s.encode(), hashlib.sha512)
+
+
+def get_string_crc64nvme(s: str) -> str:
+    """Return the CRC-64/NVME hex digest of ``s`` (UTF-8 encoded)."""
+    return hash_bytes(s.encode(), Crc64Nvme)

@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from hashy import dls_sort, get_dls_md5, get_dls_sha256, get_dls_sha512, json_dumps
+from hashy import dls_sort, get_dls_md5, get_dls_sha256, get_dls_sha512, get_dls_crc64nvme, json_dumps
 
 
 def test_dl_sort():
@@ -29,6 +29,9 @@ def test_dl_sort():
 
     dict_hash_512 = get_dls_sha512(in_dict)
     assert dict_hash_512 == "a010a6ff0601b3e4cd33ffff6004718b5145302c24960904778bfedc4228521345c8936322ff267e49f321bdc404b3720492ace7434a4669d1896018fa55e285"
+
+    dict_hash_crc64nvme = get_dls_crc64nvme(in_dict)
+    assert dict_hash_crc64nvme == "fc20db81351f3573"
 
 
 def test_enum():
@@ -62,6 +65,9 @@ def test_set_sort():
     x = {"a", "c", "b"}  # set
     y = ["a", "b", "c"]
     md5 = "c29a5747d698b2f95cdfd5ed6502f19d"
+    crc64nvme = "7be8da44096799f6"
     assert dls_sort(x) == dls_sort(y)
     assert get_dls_md5(x) == md5
     assert get_dls_md5(y) == md5
+    assert get_dls_crc64nvme(x) == crc64nvme
+    assert get_dls_crc64nvme(y) == crc64nvme

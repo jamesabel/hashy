@@ -1,5 +1,5 @@
 """
-Conventional md5/sha256/sha512 hashes for files.
+Conventional md5/sha256/sha512/crc64nvme hashes for files.
 
 Files are read and hashed in fixed-size chunks (see ``_hash_core.hash_stream``)
 so that memory use stays constant regardless of file size. The resulting digests
@@ -10,6 +10,7 @@ from pathlib import Path
 import hashlib
 from typing import Callable, Union
 
+from ._crc64nvme import Crc64Nvme
 from ._hash_core import hash_stream
 
 
@@ -26,6 +27,11 @@ def get_file_sha256(file_path: Union[Path, str]) -> str:
 def get_file_sha512(file_path: Union[Path, str]) -> str:
     """Return the sha512 hex digest of the file at ``file_path``."""
     return _hash_file(file_path, hashlib.sha512)
+
+
+def get_file_crc64nvme(file_path: Union[Path, str]) -> str:
+    """Return the CRC-64/NVME hex digest of the file at ``file_path``."""
+    return _hash_file(file_path, Crc64Nvme)
 
 
 def _hash_file(file_path: Union[Path, str], hash_function: Callable) -> str:
