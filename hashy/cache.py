@@ -401,9 +401,16 @@ class _CachyCache:
             value was (re)computed and written (so the caller updates metadata / evicts).
         """
         with self._payload_db() as db:
-            if key in db:
+            # Read EAFP rather than `if key in db: db[key]`: another process can expire
+            # (delete) the entry between a membership test and the read, and sqlitedict
+            # raises KeyError for a missing key. A lost race is simply a miss.
+            try:
+                payload = db[key]
+            except KeyError:
+                payload = _MISS
+            if payload is not _MISS:
                 try:
-                    result = cachy_decompress(db[key])
+                    result = cachy_decompress(payload)
                     _cache_counters.cache_hit_counter += 1
                     return result, False
                 except CacheReadError as e:
@@ -411,7 +418,7 @@ class _CachyCache:
                     log.warning(f'Discarding unreadable cache entry for "{self.function_name}": {e}')
                     self._discard_payload(db, key)
 
-            # miss (genuine, or just-discarded bad entry) - recompute
+            # miss (genuine, just-discarded bad entry, or expired by another process) - recompute
             _cache_counters.cache_miss_counter += 1
             result = self.func(*args, **kwargs)
             self._store(db, key, result)
@@ -474,7 +481,12 @@ class _CachyCache:
             oldest_key = self._find_oldest(metadata_db)
             if oldest_key is None:
                 return
-            del metadata_db[oldest_key]
+            try:
+                del metadata_db[oldest_key]
+            except KeyError:
+                # Another process expired/evicted it between our scan and the delete; nothing left to do for this key.
+                log.debug(f'Key "{oldest_key}" already removed from metadata for "{self.function_name}" (concurrent expiry/eviction).')
+                return
             metadata_db.commit()
             with self._payload_db() as db:
                 try:

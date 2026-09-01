@@ -20,7 +20,7 @@ from .cache_directory import get_cache_directory
 
 
 class _FakeMetadataDB(dict):
-    """Minimal stand-in for the sqlitedict metadata table (context-manager + commit)."""
+    """Minimal stand-in for a sqlitedict table (context-manager + commit)."""
 
     def commit(self):
         pass
@@ -37,6 +37,13 @@ class _LostDeleteRaceDB(_FakeMetadataDB):
 
     def __delitem__(self, key):
         raise KeyError(key)
+
+
+class _LostReadRaceDB(_FakeMetadataDB):
+    """The key looks present, but another process deletes it before our read runs (sqlitedict raises KeyError)."""
+
+    def __getitem__(self, key):
+        raise KeyError(key)  # the other process expired the row between membership test and read
 
 
 class _LostWriteRaceDB(_FakeMetadataDB):
@@ -118,6 +125,34 @@ def test_expire_and_touch_does_not_resurrect_expired_entry():
 
     assert key not in metadata_db
     assert get_counters().cache_expired_counter == 1
+
+
+def test_read_tolerates_concurrent_expiry():
+    """A payload expired by another process between our membership test and read must be a miss, not a KeyError."""
+    clear_counters()
+    cache = _make_cache("read_race_func", cache_life=None)
+    key = "somekey"
+    payload_db = _LostReadRaceDB({key: b"payload that vanishes on read"})
+    cache._payload_db = lambda: payload_db  # type: ignore[method-assign]
+
+    result, cache_write = cache._read_file_or_compute(key, (1,), {})  # must not raise
+
+    assert (result, cache_write) == (2, True)  # recomputed and stored
+    assert get_counters().cache_miss_counter == 1
+    assert get_counters().cache_hit_counter == 0
+
+
+def test_evict_oldest_tolerates_concurrent_delete():
+    """The LRU victim being deleted by another process between the scan and our delete must not raise."""
+    clear_counters()
+    cache = _make_cache("evict_race_func", cache_life=None, max_cache_size=1)
+    key = "somekey"
+    metadata_db = _LostDeleteRaceDB({key: CacheMetadata()})
+    cache._metadata_db = lambda: metadata_db  # type: ignore[method-assign]
+
+    cache._evict_oldest()  # must not raise
+
+    assert get_counters().cache_eviction_counter == 0  # the other process did the evicting
 
 
 # -- multiprocess smoke ------------------------------------------------------
