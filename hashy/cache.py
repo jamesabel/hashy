@@ -329,24 +329,43 @@ class _CachyCache:
             write_ts = 0.0  # force a cache miss
 
         cache_life = self.cache_life() if callable(self.cache_life) else self.cache_life
-        if cache_life is not None and time.time() - write_ts >= cache_life.total_seconds():
+        expired = cache_life is not None and time.time() - write_ts >= cache_life.total_seconds()
+        if expired:
             self._expire_entry(metadata_db, key)
 
-        # Refresh the LRU read time on access (only relevant when size-bounded).
-        if self.max_cache_size is not None and key in metadata_db:
+        # Refresh the LRU read time on access (only relevant when size-bounded). Guard on the
+        # row actually read above rather than re-testing membership: another process may have
+        # written the key since (row_metadata would be None) or expired it (we must not touch a
+        # just-expired entry back into existence).
+        if self.max_cache_size is not None and row_metadata is not None and not expired:
             row_metadata.read_timestamp = time.time()
             metadata_db[key] = row_metadata
             metadata_db.commit()
 
     def _expire_entry(self, metadata_db: CachyDBDict, key: str) -> None:
-        """Delete an expired entry's metadata, payload, and in-memory copy."""
-        if key in metadata_db:
-            _cache_counters.cache_expired_counter += 1
+        """
+        Delete an expired entry's metadata, payload, and in-memory copy.
+
+        Multiple processes sharing the cache file can race to expire the same entry. Losing
+        that race (the key is already gone) is success, not an error, so the ``KeyError``
+        sqlitedict raises when deleting a missing key is swallowed rather than letting it
+        escape to the caller. Deleting first and tolerating ``KeyError`` (instead of an
+        ``if key in db`` check) is what closes the check-then-act window. The expired
+        counter is only incremented by the process whose delete actually ran.
+        """
+        try:
             del metadata_db[key]
+        except KeyError:
+            pass  # another process expired this entry first
+        else:
+            _cache_counters.cache_expired_counter += 1
             metadata_db.commit()
         with self._payload_db() as db:
-            if key in db:
+            try:
                 del db[key]
+            except KeyError:
+                pass  # another process expired this entry first
+            else:
                 db.commit()
         # Drop the in-memory copy too, otherwise _read_memory would serve the expired value.
         if self.in_memory:
