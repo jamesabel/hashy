@@ -150,18 +150,19 @@ class CachyDBDict:
     sqlite file, backed by ``msqlite``.
 
     Every read runs in its own read transaction and every write (set or delete) in its own
-    write transaction, so a store is exactly one lock acquisition and nothing is held open
-    between statements -- in particular not while the decorated function computes. msqlite
+    write transaction, so a store is exactly one lock acquisition and no transaction is held
+    open between statements -- in particular not while the decorated function computes. msqlite
     retries lock contention with jittered backoff and raises :class:`MSQLiteTimeoutError`
     once :data:`LOCK_TIMEOUT_S` has passed; the caller decides how to report that.
 
     Missing keys raise ``KeyError`` on read and on delete. :class:`_CachyCache` relies on
     this to treat "another process got there first" as success rather than an error.
 
-    Connections are opened per transaction rather than kept per thread: a decorated function
-    may be called from many short-lived threads, and a per-thread connection would outlive
-    each of them. The context-manager protocol and :meth:`commit` are kept so a view reads
-    as a scoped resource; neither holds anything open.
+    A view opens one connection on first use, reuses it for every statement in its ``with``
+    block, and closes it when the block ends (:meth:`close`). Nothing stays open between
+    calls: callers (and hashy's own tests) delete cache files between calls, which Windows
+    refuses while a connection is open. :meth:`commit` is kept so a view reads like the
+    sqlitedict table it replaced; every write is already committed.
 
     This base class stores ``bytes`` payloads; :class:`CachyMetadataDBDict` stores timestamps.
     """
@@ -174,7 +175,7 @@ class CachyDBDict:
         self.table_name = table_name
         self._table = _quote_identifier(table_name)
         self._column_names = ", ".join(column.split()[0] for column in self.columns)
-        self.database = Database(self.cache_file_path, timeout_s=LOCK_TIMEOUT_S, persistent=False)
+        self.database = Database(self.cache_file_path, timeout_s=LOCK_TIMEOUT_S)
         self._ensure_table()
 
     # -- row conversion (overridden by subclasses) -------------------------
@@ -240,11 +241,15 @@ class CachyDBDict:
     def commit(self) -> None:
         """Nothing to do: each write is already its own committed transaction."""
 
+    def close(self) -> None:
+        """Close the view's connection; the next statement (if any) would open a new one."""
+        self.database.close()
+
     def __enter__(self) -> "CachyDBDict":
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
-        return None
+        self.close()
 
 
 class CachyMetadataDBDict(CachyDBDict):

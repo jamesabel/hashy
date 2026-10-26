@@ -1,6 +1,6 @@
 # app
 platformdirs
-msqlite
+msqlite>=1.0.1
 # dev
 dotenv
 twine

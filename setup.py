@@ -23,7 +23,7 @@ setup(
     keywords=["hash"],
     packages=[__title__],
     package_data={__title__: [readme_file_path, "py.typed"]},
-    install_requires=["platformdirs", "msqlite"],
+    install_requires=["platformdirs", "msqlite>=1.0.1"],
     python_requires=">=3.12",  # msqlite requires 3.12+
     classifiers=[
         "Development Status :: 4 - Beta",
