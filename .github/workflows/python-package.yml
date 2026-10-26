@@ -18,8 +18,9 @@ jobs:
     strategy:
       matrix:
         # Policy: the minimum supported version (3.12, set by msqlite), the latest stable release (3.15)
-        # and the upcoming pre-release (3.16). Move the matrix along as new Pythons are released.
-        python-version: ["3.12", "3.15", "3.16"]
+        # and the upcoming pre-release once actions/setup-python ships one (3.16 is not available yet;
+        # add it when it is). Move the matrix along as new Pythons are released.
+        python-version: ["3.12", "3.15"]
 
     steps:
     - uses: actions/checkout@v5
