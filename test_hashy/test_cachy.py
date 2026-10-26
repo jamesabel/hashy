@@ -92,6 +92,7 @@ def test_cachy_in_memory_expiry():
     assert get_counters() == CacheCounters(cache_memory_hit_counter=1, cache_hit_counter=1, cache_miss_counter=2, cache_expired_counter=1, cache_eviction_counter=0)
 
 
+# AI-GENERATED TEST (Claude Code) - delete this line to make this test human-owned.
 def test_cachy_simple():
 
     @cachy(cache_life, get_cache_directory())
@@ -110,9 +111,10 @@ def test_cachy_simple():
     assert get_counters() == CacheCounters(cache_memory_hit_counter=0, cache_hit_counter=2, cache_miss_counter=2, cache_expired_counter=0, cache_eviction_counter=0)
     assert cachy_simple_func(2) == 2
     assert get_counters() == CacheCounters(cache_memory_hit_counter=0, cache_hit_counter=3, cache_miss_counter=2, cache_expired_counter=0, cache_eviction_counter=0)
-    assert pformat(get_counters()) == "cache_memory_hit_counter=0,cache_hit_counter=3,cache_miss_counter=2,cache_expired_counter=0,cache_eviction_counter=0"
+    assert pformat(get_counters()) == "cache_memory_hit_counter=0,cache_hit_counter=3,cache_miss_counter=2,cache_expired_counter=0,cache_eviction_counter=0,cache_store_failed_counter=0"
 
 
+# AI-GENERATED TEST (Claude Code) - delete this line to make this test human-owned.
 def test_cachy_simple_in_memory():
 
     @cachy(cache_life, get_cache_directory(), in_memory=True)
@@ -131,7 +133,7 @@ def test_cachy_simple_in_memory():
     assert get_counters() == CacheCounters(cache_memory_hit_counter=2, cache_hit_counter=2, cache_miss_counter=2, cache_expired_counter=0, cache_eviction_counter=0)
     assert cachy_simple_func(2) == 2
     assert get_counters() == CacheCounters(cache_memory_hit_counter=3, cache_hit_counter=3, cache_miss_counter=2, cache_expired_counter=0, cache_eviction_counter=0)
-    assert pformat(get_counters()) == "cache_memory_hit_counter=3,cache_hit_counter=3,cache_miss_counter=2,cache_expired_counter=0,cache_eviction_counter=0"
+    assert pformat(get_counters()) == "cache_memory_hit_counter=3,cache_hit_counter=3,cache_miss_counter=2,cache_expired_counter=0,cache_eviction_counter=0,cache_store_failed_counter=0"
 
 
 def test_cachy_dict():

@@ -23,7 +23,7 @@ The `scripts/*.bat` files assume a `venv/` created via `scripts/make_venv_dev.ba
 - Format: `black -l 192 hashy test_hashy setup.py` (line length 192, not default 88)
 - Build + publish: `scripts/pypi.bat` (bdist_wheel + twine upload)
 
-CI (`.github/workflows/python-package.yml`) runs flake8 + `pytest -s test_hashy` on Python 3.10–3.13.
+CI (`.github/workflows/python-package.yml`) runs flake8 + `pytest -s test_hashy` on the minimum supported Python (3.12, set by `msqlite`), the latest stable release and the upcoming pre-release.
 
 ## Key design points
 
@@ -31,11 +31,13 @@ CI (`.github/workflows/python-package.yml`) runs flake8 + `pytest -s test_hashy`
 
 **`cachy` cache keys.** The cache key is `get_dls_sha512([get_dls_sha512(args), get_dls_sha512(kwargs)])` — i.e. arguments are hashed via the dls machinery. This is why arguments don't need to be picklable or hashable in the usual sense, but they DO need to be json-serializable through `dls_sort`/`convert_serializable_special_cases`.
 
-**`cachy` storage layout.** Each decorated function gets its own sqlite file `{cache_dir}/{function_name}_cache.sqlite` (default `cache_dir` is the OS user cache dir via `platformdirs`). Within that file there are up to two `sqlitedict` tables:
-- `{function_name}` — the actual cached payloads (lzma-compressed pickle; see `cachy_compress`/`cachy_decompress` and the `USE_COMPRESSION` flag).
-- `{function_name}_metadata` — `CacheMetadata` (read/write timestamps), kept separate so updating LRU read-times or expiry doesn't rewrite the (large) payload row. This metadata table is only created/used when `cache_life` or `max_cache_size` is set.
+**`cachy` storage layout.** Each decorated function gets its own sqlite file `{cache_dir}/{function_name}_cache.sqlite` (default `cache_dir` is the OS user cache dir via `platformdirs`). Within that file there are up to two tables, each accessed through a mapping-style view class:
+- `{function_name}` (`CachyDBDict`, `key TEXT PRIMARY KEY, value BLOB`) — the actual cached payloads (lzma-compressed pickle; see `cachy_compress`/`cachy_decompress` and the `USE_COMPRESSION` flag).
+- `{function_name}_metadata` (`CachyMetadataDBDict`, `key, read_timestamp REAL, write_timestamp REAL`) — `CacheMetadata`, kept separate so updating LRU read-times or expiry doesn't rewrite the (large) payload row. This metadata table is only created/used when `cache_life` or `max_cache_size` is set.
 
-**Concurrency model.** Thread/process safety comes from `sqlitedict` (sqlite itself is not concurrent-safe). `CachyDBDict` forces `journal_mode="WAL"`. Expect transient `sqlite3.OperationalError` (db locked) under concurrent access — the code treats these as non-fatal: the metadata update path retries up to 100 times with jittered sleeps, and commit/VACUUM failures are logged and swallowed. When changing cache code, preserve this "never crash the caller on a locked db" contract.
+The file's layout version is stamped in `PRAGMA user_version` (`CACHE_FORMAT_VERSION`); a file in any other version (e.g. the pickled `sqlitedict` tables hashy < 0.15 wrote) has its tables dropped and recreated on first use.
+
+**Concurrency model.** Thread/process safety comes from `msqlite` (sqlite itself is not concurrent-safe). Every view read is its own read transaction and every write its own `BEGIN IMMEDIATE` write transaction (WAL mode, nothing held open while the decorated function computes). A view holds one connection for the span of its `with` block and closes it on exit, so no connection outlives a call: hashy's tests delete cache files between calls, which Windows refuses while a connection is open. `msqlite` retries `database is locked` with jittered backoff for up to `LOCK_TIMEOUT_S` (30 s) and then raises `MSQLiteTimeoutError`; `_CachyCache` catches that at each cache operation, logs a WARNING (a lost store also increments `cache_store_failed_counter`) and the caller still gets its result. Any other `sqlite3.OperationalError` is a real fault and propagates. When changing cache code, preserve this "never crash the caller on a locked db, never lose a store silently" contract, and never nest a write transaction inside another on the same thread (it would wait on itself until the timeout).
 
 **Cache eviction / `max_cache_size`.** LRU eviction is driven by on-disk file size (`cache_file_path.stat().st_size`), not entry count. After deleting the least-recently-read entry it runs `VACUUM` to actually shrink the file. `max_cache_size` may be an int or a callable returning an int.
 

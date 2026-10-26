@@ -17,7 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        # Policy: the minimum supported version (3.12, set by msqlite), the latest stable release (3.15)
+        # and the upcoming pre-release once actions/setup-python ships one (3.16 is not available yet;
+        # add it when it is). Move the matrix along as new Pythons are released.
+        python-version: ["3.12", "3.15"]
 
     steps:
     - uses: actions/checkout@v5

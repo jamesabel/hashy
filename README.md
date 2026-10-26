@@ -29,8 +29,12 @@ integrity checking), returned as a 16-character hex string.
 
 Hashes for complex data types like dict, list and set are specific to hashy.
 
-Supports multithreading and multiprocessing, via the `sqlitedict` library. While the `sqlite` database itself is not 
-thread-safe/process-safe, the `sqlitedict` library provides a thread-safe/process-safe interface.
+`cachy` supports multithreading and multiprocessing via the [`msqlite`](https://pypi.org/project/msqlite/) library,
+which retries SQLite's `database is locked` errors with jittered backoff. A store that still cannot be written after
+30 seconds (`hashy.cache.LOCK_TIMEOUT_S`) is logged as a warning and counted in `get_counters().cache_store_failed_counter`;
+the caller always receives the computed result.
+
+Requires Python 3.12 or later.
 
 ## cachy
 
