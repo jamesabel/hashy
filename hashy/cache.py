@@ -80,10 +80,8 @@ class CacheCounters:
             f"cache_miss_counter={self.cache_miss_counter}",
             f"cache_expired_counter={self.cache_expired_counter}",
             f"cache_eviction_counter={self.cache_eviction_counter}",
+            f"cache_store_failed_counter={self.cache_store_failed_counter}",
         ]
-        if self.cache_store_failed_counter:
-            # Only shown when a store was lost: the repr of a healthy cache is the historical five fields.
-            values.append(f"cache_store_failed_counter={self.cache_store_failed_counter}")
         return ",".join(values)
 
     def __eq__(self, other):
