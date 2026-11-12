@@ -44,7 +44,12 @@ _MISS = object()
 
 
 class CacheReadError(Exception):
-    """Cache entry could not be decompressed/unpickled; treat as a miss."""
+    """
+    Cache entry could not be turned back into a value; treat as a miss.
+
+    Raised for corruption, a transient out-of-memory, and a pickle the application can no longer
+    rebuild because the stored value's class has moved, been removed or changed shape.
+    """
 
 
 class CacheMetadata:
@@ -266,6 +271,18 @@ class CachyMetadataDBDict(CachyDBDict):
         return metadata
 
 
+# Exceptions that mean "this stored payload cannot be turned back into a value". A cache must never make a
+# call fail that would have succeeded without it, so each of these is reported as a CacheReadError (a miss):
+# - MemoryError, lzma.LZMAError, EOFError, IndexError, pickle.UnpicklingError: corruption or a transient out-of-memory.
+# - ImportError (incl. ModuleNotFoundError): the module the pickle names is gone (class moved or removed).
+# - AttributeError: the module is still there but no longer defines the name.
+# - ValueError, TypeError: the class is still there but can no longer rebuild the stored value (e.g. a removed
+#   Enum member, a NamedTuple whose fields changed), or the payload is not bytes at all.
+# When old and new versions of an application share a cache file, each discards and rewrites entries the
+# other stored in a shape it cannot read (with a warning each time) rather than failing.
+_UNREADABLE_PAYLOAD_ERRORS = (MemoryError, lzma.LZMAError, EOFError, IndexError, pickle.UnpicklingError, ImportError, AttributeError, ValueError, TypeError)
+
+
 def cachy_compress(data: Any) -> bytes:
     """
     Serialize and (optionally) compress a value for storage, using pickle + lzma.
@@ -289,14 +306,18 @@ def cachy_decompress(data: bytes) -> Any:
 
     :param data: the payload bytes read from the cache
     :return: the original value
-    :raises CacheReadError: if the payload cannot be decompressed/unpickled (corruption or transient OOM)
+    :raises CacheReadError: if the payload cannot be decompressed/unpickled: corruption, a transient OOM, or a
+        value whose class has moved, been removed or changed shape since it was stored
+        (see :data:`_UNREADABLE_PAYLOAD_ERRORS`)
     """
     if not USE_COMPRESSION:
         return data
     try:
         return pickle.loads(lzma.decompress(data))
-    except (MemoryError, lzma.LZMAError, EOFError, pickle.UnpicklingError) as e:
-        raise CacheReadError(f"unreadable cache entry ({len(data)} bytes): {e}") from e
+    except _UNREADABLE_PAYLOAD_ERRORS as e:
+        # The payload may not be bytes at all (that is one way to get here), so do not assume it has a length.
+        size = f"{len(data)} bytes" if isinstance(data, (bytes, bytearray)) else f"a {type(data).__name__}, not bytes"
+        raise CacheReadError(f"unreadable cache entry ({size}): {type(e).__name__}: {e}") from e
 
 
 def get_cache_dir() -> Path:
@@ -556,7 +577,7 @@ class _CachyCache:
                     _cache_counters.cache_hit_counter += 1
                     return result, False
                 except CacheReadError as e:
-                    # unreadable entry (transient OOM or corruption) -> drop it, treat as miss
+                    # unreadable entry (transient OOM, corruption, or a class that moved/changed) -> drop it, treat as miss
                     log.warning(f'Discarding unreadable cache entry for "{self.function_name}": {e}')
                     self._discard_payload(db, key)
 
