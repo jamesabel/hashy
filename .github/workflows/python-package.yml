@@ -17,10 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # Policy: the minimum supported version (3.12, set by msqlite), the latest stable release (3.15)
-        # and the upcoming pre-release once actions/setup-python ships one (3.16 is not available yet;
-        # add it when it is). Move the matrix along as new Pythons are released.
-        python-version: ["3.12", "3.15"]
+        # Policy: every released version from the minimum supported (3.12, set by msqlite) through the
+        # latest stable release (3.15). The 3.16 pre-release is left out for now: actions/setup-python
+        # ships it, but cffi and librt (dependencies of the dev requirements) have no cp316 wheels yet
+        # and must not be built from source. Add 3.16 once PyPI has those wheels, and move the matrix
+        # along as new Pythons are released.
+        python-version: ["3.12", "3.13", "3.14", "3.15"]
 
     steps:
     - uses: actions/checkout@v5

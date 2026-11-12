@@ -23,7 +23,7 @@ The `scripts/*.bat` files assume a `venv/` created via `scripts/make_venv_dev.ba
 - Format: `black -l 192 hashy test_hashy setup.py` (line length 192, not default 88)
 - Build + publish: `scripts/pypi.bat` (bdist_wheel + twine upload)
 
-CI (`.github/workflows/python-package.yml`) runs flake8 + `pytest -s test_hashy` on the minimum supported Python (3.12, set by `msqlite`), the latest stable release and the upcoming pre-release.
+CI (`.github/workflows/python-package.yml`) runs flake8 + `pytest -s test_hashy` on every released Python from the minimum supported (3.12, set by `msqlite`) through the latest stable release (3.15). The 3.16 pre-release is not in the matrix until `cffi` and `librt` ship cp316 wheels.
 
 ## Key design points
 
