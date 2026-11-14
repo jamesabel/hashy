@@ -21,7 +21,7 @@ The `scripts/*.bat` files assume a `venv/` created via `scripts/make_venv_dev.ba
 - Type check: `mypy -m hashy` and `mypy -m test_hashy` (config in `mypy.ini`)
 - Lint: `flake8 --ignore=E402,F401,W503,E203,E501 hashy`
 - Format: `black -l 192 hashy test_hashy setup.py` (line length 192, not default 88)
-- Build + publish: `scripts/pypi.bat` (bdist_wheel + twine upload)
+- Build: `python -m build --wheel --no-isolation` (in the dev venv). Publish to PyPI: publish a GitHub release (or run the `Publish to PyPI` workflow); `.github/workflows/publish.yml` builds and uploads with Provenance through a PyPI trusted publisher. Never upload from a workstation, which cannot produce Provenance.
 
 CI (`.github/workflows/python-package.yml`) runs flake8 + `pytest -s test_hashy` on every released Python from the minimum supported (3.12, set by `msqlite`) through the latest stable release (3.15). The 3.16 pre-release is not in the matrix until `cffi` and `librt` ship cp316 wheels.
 
