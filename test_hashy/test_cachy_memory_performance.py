@@ -1,7 +1,7 @@
 import time
 from datetime import timedelta
 
-from hashy.cache import cachy, get_counters, clear_counters
+from hashy.cache import cachy, clear_counters, get_counters
 
 from .cache_directory import get_cache_directory
 

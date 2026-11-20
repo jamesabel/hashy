@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from hashy import get_string_md5, get_string_sha256, get_string_sha512, get_string_crc64nvme, get_file_md5, get_file_sha256, get_file_sha512, get_file_crc64nvme
+from hashy import get_file_crc64nvme, get_file_md5, get_file_sha256, get_file_sha512, get_string_crc64nvme, get_string_md5, get_string_sha256, get_string_sha512
 
 a_md5 = "0cc175b9c0f1b6a831c399e269772661"
 a_sha256 = "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"

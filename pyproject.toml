@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hashy"
+dynamic = ["version"]  # single source: hashy/__version__.py
+description = "simple hash library for string, file, dict, set and list"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "abel", email = "j@abel.co" }]
+keywords = ["hash"]
+requires-python = ">=3.12"  # msqlite requires 3.12+
+dependencies = [
+    "platformdirs",
+    "msqlite>=1.0.1",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/jamesabel/hashy"
+Repository = "https://github.com/jamesabel/hashy"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "python-dotenv",
+    "psutil",
+    "ruff",
+    "ty",
+]
+
+[tool.hatch.version]
+path = "hashy/__version__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hashy"]
+
+[tool.hatch.build.targets.sdist]
+include = ["hashy", "test_hashy", "README.md", "LICENSE"]
+
+[tool.ruff]
+line-length = 192
+
+[tool.ruff.lint.per-file-ignores]
+"hashy/__init__.py" = ["F401"]  # re-exports the public API
+
+[tool.ty.src]
+# the library only, as mypy was run; the tests use duck-typed fakes and the examples include deliberately wrong code
+include = ["hashy"]
+
+[tool.pytest.ini_options]
+testpaths = ["test_hashy"]
+
+[tool.coverage.run]
+branch = true
+omit = [
+    "*venv/*",
+    "test_*/*",
+]

@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from hashy import cachy
-from hashy.cache import CachyDBDict, cachy_decompress, CacheReadError, clear_counters, get_counters
+from hashy.cache import CacheReadError, CachyDBDict, cachy_decompress, clear_counters, get_counters
 
 from .cache_directory import get_cache_directory
 

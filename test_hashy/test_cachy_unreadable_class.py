@@ -64,7 +64,7 @@ def test_cachy_decompress_module_gone(tmp_path, monkeypatch):
 def test_cachy_decompress_non_bytes_payload():
     # A payload that is not bytes at all (e.g. stored with compression off) is unreadable too, and reporting it must not itself fail.
     with pytest.raises(CacheReadError, match="TypeError"):
-        cachy_decompress(123)  # type: ignore[arg-type]
+        cachy_decompress(123)  # ty: ignore[invalid-argument-type]
 
 
 # AI-GENERATED TEST (Claude Code) - delete this line to make this test human-owned.

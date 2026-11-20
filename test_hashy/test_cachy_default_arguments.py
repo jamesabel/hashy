@@ -1,7 +1,7 @@
-from pathlib import Path
-from datetime import timedelta
-import time
 import multiprocessing
+import time
+from datetime import timedelta
+from pathlib import Path
 
 from hashy import cachy
 
@@ -24,7 +24,6 @@ def get_time(t: float = time.time()) -> float:
 
 
 class CacheClass(mp_context.Process):
-
     def __init__(self):
         super().__init__()
         self.queue = mp_context.Queue()

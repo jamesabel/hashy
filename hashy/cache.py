@@ -20,27 +20,29 @@ containing a payload table (named after the function) and, when ``cache_life`` o
 ``max_cache_size`` is used, a ``{function_name}_metadata`` table.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-from functools import wraps
-from pathlib import Path
-from datetime import timedelta
-from logging import getLogger
 import inspect
-import time
-import sqlite3
-import pickle
 import lzma
+import pickle
+import sqlite3
+import time
+from collections.abc import Callable
+from datetime import timedelta
+from functools import wraps
+from logging import getLogger
+from pathlib import Path
+from typing import Any, Self
 
-from platformdirs import user_cache_dir
 from msqlite import Database, MSQLiteTimeoutError, Transaction
+from platformdirs import user_cache_dir
 
-from . import __application_name__, __author__, get_dls_sha512
+from .__version__ import __application_name__, __author__
+from .dls_hash import get_dls_sha512
 
 log = getLogger(__name__)
 
 # Sentinel returned by the in-memory read to mean "not found" -- distinct from a
 # legitimately cached ``None`` value, which must be treated as a hit.
-_MISS = object()
+_MISS: Any = object()
 
 
 class CacheReadError(Exception):
@@ -173,7 +175,7 @@ class CachyDBDict:
     """
 
     # Value column definitions; subclasses override these and the two row converters.
-    columns: Tuple[str, ...] = ("value BLOB",)
+    columns: tuple[str, ...] = ("value BLOB",)
 
     def __init__(self, cache_file_path: Path, table_name: str):
         self.cache_file_path = Path(cache_file_path)
@@ -234,11 +236,11 @@ class CachyDBDict:
         if deleted == 0:
             raise KeyError(key)
 
-    def keys(self) -> List[str]:
+    def keys(self) -> list[str]:
         with self.database.read() as tx:
             return [row[0] for row in tx.execute(f"SELECT key FROM {self._table}").fetchall()]
 
-    def items(self) -> List[Tuple[str, Any]]:
+    def items(self) -> list[tuple[str, Any]]:
         with self.database.read() as tx:
             rows = tx.execute(f"SELECT key, {self._column_names} FROM {self._table}").fetchall()
         return [(row[0], self._from_row(tuple(row[1:]))) for row in rows]
@@ -250,7 +252,7 @@ class CachyDBDict:
         """Close the view's connection; the next statement (if any) would open a new one."""
         self.database.close()
 
-    def __enter__(self) -> "CachyDBDict":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
@@ -352,17 +354,17 @@ class _CachyCache:
         self,
         func: Callable,
         cache_dir: Path,
-        cache_life: Union[timedelta, Callable[[], Optional[timedelta]], None],
+        cache_life: timedelta | Callable[[], timedelta | None] | None,
         cache_none: bool,
         in_memory: bool,
-        max_cache_size: Union[int, Callable, None],
+        max_cache_size: int | Callable | None,
     ):
         self.func = func
-        self.function_name = func.__name__
+        self.function_name = func.__name__  # ty: ignore[missing-attribute]  # cachy decorates named functions
         # Used to resolve default argument values when building the cache key, so a
         # call relying on a default keys the same as one passing that value explicitly.
         try:
-            self.signature: Optional[inspect.Signature] = inspect.signature(func)
+            self.signature: inspect.Signature | None = inspect.signature(func)
         except (ValueError, TypeError):
             # Some callables (e.g. certain builtins) expose no signature; fall back to
             # keying on the explicitly-passed arguments only.
@@ -376,7 +378,7 @@ class _CachyCache:
         self.payload_table = self.function_name
         self.metadata_table = f"{self.function_name}_metadata"
         # Stores the same compressed payload bytes as the file cache, for fast reads.
-        self.in_memory_cache: Dict[str, bytes] = {}
+        self.in_memory_cache: dict[str, bytes] = {}
 
     # -- public entry point ------------------------------------------------
 
@@ -490,7 +492,9 @@ class _CachyCache:
             row_metadata = None
             write_ts = 0.0  # force a cache miss
 
-        cache_life = self.cache_life() if callable(self.cache_life) else self.cache_life
+        cache_life = self.cache_life
+        if cache_life is not None and not isinstance(cache_life, timedelta):
+            cache_life = cache_life()  # a callable that returns the life
         expired = cache_life is not None and time.time() - write_ts >= cache_life.total_seconds()
         if expired:
             self._expire_entry(metadata_db, key)
@@ -684,7 +688,7 @@ class _CachyCache:
             _cache_counters.cache_eviction_counter += 1
 
     @staticmethod
-    def _find_oldest(metadata_db: CachyDBDict) -> Optional[str]:
+    def _find_oldest(metadata_db: CachyDBDict) -> str | None:
         """Return the key with the oldest read timestamp, or None if the metadata table is empty."""
         oldest_key = None
         oldest_read_timestamp = None
@@ -712,8 +716,8 @@ class _CachyCache:
 
 
 def cachy(
-    cache_life: Union[timedelta, Callable[[], Optional[timedelta]], None] = None,
-    cache_dir: Path = get_cache_dir(),
+    cache_life: timedelta | Callable[[], timedelta | None] | None = None,
+    cache_dir: Path = get_cache_dir(),  # noqa: B008  # resolved once at import; part of the public signature
     cache_none: bool = False,
     in_memory: bool = False,
     max_cache_size: int | Callable | None = None,

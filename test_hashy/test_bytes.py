@@ -1,4 +1,4 @@
-from hashy import get_bytes_md5, get_bytes_sha256, get_bytes_sha512, get_bytes_crc64nvme
+from hashy import get_bytes_crc64nvme, get_bytes_md5, get_bytes_sha256, get_bytes_sha512
 
 zero_md5 = "93b885adfe0da089cdf634904fd59f71"
 zero_sha256 = "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"

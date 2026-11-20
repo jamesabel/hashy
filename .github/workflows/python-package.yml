@@ -1,5 +1,4 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+# Lints, type checks and tests the package on every supported Python version, using uv.
 
 name: Python package
 
@@ -9,43 +8,48 @@ on:
   pull_request:
     branches: [ master ]
   workflow_dispatch:
-    branches: [ master ]
 
 jobs:
   build:
 
     runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+      UV_PYTHON_PREFERENCE: only-system
     strategy:
+      fail-fast: false
       matrix:
         # Policy: every released version from the minimum supported (3.12, set by msqlite) through the
-        # latest stable release (3.15). The 3.16 pre-release is left out for now: actions/setup-python
-        # ships it, but cffi and librt (dependencies of the dev requirements) have no cp316 wheels yet
-        # and must not be built from source. Add 3.16 once PyPI has those wheels, and move the matrix
-        # along as new Pythons are released.
-        python-version: ["3.12", "3.13", "3.14", "3.15"]
+        # latest stable release (3.15), plus the upcoming pre-release (3.16). Every dependency in uv.lock
+        # installs from a wheel on all of them. Move the matrix along as new Pythons are released.
+        python-version: ["3.12", "3.13", "3.14", "3.15", "3.16"]
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
+    # The interpreter comes from actions/setup-python, not from uv: the multiprocessing tests need
+    # multiprocessing.synchronize, which uv's managed Python lacks on the GitHub runner.
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
         allow-prereleases: true
+    - name: Install uv
+      uses: astral-sh/setup-uv@v10.3.3  # setup-uv publishes no floating major tag
+      with:
+        enable-cache: false  # a handful of small wheels; the cache-save step fails when the cache dir is absent
     - name: Install dependencies
+      run: uv sync --locked
+
+    - name: Lint with ruff
       run: |
-        python -m pip install --upgrade pip
-        python -m pip install flake8 pytest
-        if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        uv run ruff check
+        uv run ruff format --check
+
+    - name: Type check with ty
+      run: uv run ty check
 
     - name: Test with pytest
-      run: |
-        pytest -s --cov --cov-report=xml test_hashy
+      run: uv run pytest -s --cov --cov-report=xml test_hashy
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v6
@@ -54,4 +58,3 @@ jobs:
         flags: ${{ matrix.python-version }}
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: false
-
