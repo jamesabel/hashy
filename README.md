@@ -4,6 +4,7 @@
 [![codecov](https://codecov.io/gh/jamesabel/hashy/branch/master/graph/badge.svg)](https://codecov.io/gh/jamesabel/hashy)
 [![PyPI version](https://img.shields.io/pypi/v/hashy.svg)](https://pypi.org/project/hashy/)
 [![Python versions](https://img.shields.io/pypi/pyversions/hashy?cacheSeconds=3600)](https://pypi.org/project/hashy/)
+[![Free-threaded](https://img.shields.io/badge/free--threaded-3.14t%20%7C%203.15t-blue)](https://docs.python.org/3/howto/free-threading-python.html)
 [![Downloads](https://img.shields.io/pypi/dm/hashy.svg)](https://pypi.org/project/hashy/)
 [![License: MIT](https://img.shields.io/pypi/l/hashy.svg)](https://github.com/jamesabel/hashy/blob/master/LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
