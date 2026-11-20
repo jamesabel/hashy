@@ -25,7 +25,9 @@ The project is managed with `uv`; all packaging and tool configuration lives in 
 - Add a dependency: `uv add <pkg>` (runtime) or `uv add --dev <pkg>`; commit the updated `uv.lock`
 - Build: `uv build`. Publish to PyPI: publish a GitHub release (or run the `Publish to PyPI` workflow); `.github/workflows/publish.yml` builds and uploads with Provenance through a PyPI trusted publisher. Never upload from a workstation, which cannot produce Provenance.
 
-CI (`.github/workflows/python-package.yml`) runs ruff (lint + format check), ty and `pytest -s test_hashy` on every released Python from the minimum supported (3.12, set by `msqlite`) through the latest stable release (3.15), plus the 3.16 pre-release.
+CI (`.github/workflows/python-package.yml`) runs ruff (lint + format check), ty and `pytest -s test_hashy` on every released Python from the minimum supported (3.12, set by `msqlite`) through the latest stable release (3.15), plus the 3.16 pre-release and free-threaded 3.14t and 3.15t.
+
+**Free-threaded Python.** hashy supports it. On a free-threaded build the top-level `conftest.py` imports `gilguard` (a dev dependency), which fails the test run if any import re-enables the GIL; CI also runs `python -m gilguard` there. gilguard raises on a GIL build, so it is never imported on one. To test locally: `uv run --python 3.14t pytest test_hashy` (use a separate `UV_PROJECT_ENVIRONMENT` to keep `.venv` as it is). In-process shared state must stay safe without the GIL: update counters only through `CacheCounters.increment()` (locked; `+=` loses counts), and read the in-memory cache with a single lookup, never check-then-read.
 
 Inside the package, import from the defining submodule (`from .dls_hash import ...`), never from `hashy` itself: ruff sorts the imports in `hashy/__init__.py`, so nothing may depend on their order.
 
@@ -47,7 +49,7 @@ The file's layout version is stamped in `PRAGMA user_version` (`CACHE_FORMAT_VER
 
 **Cache eviction / `max_cache_size`.** LRU eviction is driven by on-disk file size (`cache_file_path.stat().st_size`), not entry count. After deleting the least-recently-read entry it runs `VACUUM` to actually shrink the file. `max_cache_size` may be an int or a callable returning an int.
 
-**Counters.** `CacheCounters` (memory hit / hit / miss / expired / eviction) are module-global in `cache.py`, accessed via `get_counters()` / `clear_counters()`. Tests assert exact counter values, so changes to the hit/miss/expiry logic will require updating those assertions.
+**Counters.** `CacheCounters` (memory hit / hit / miss / expired / eviction) are module-global in `cache.py`, accessed via `get_counters()` / `clear_counters()` and incremented only through the locked `CacheCounters.increment()`. Tests assert exact counter values, so changes to the hit/miss/expiry logic will require updating those assertions.
 
 ## Test notes
 

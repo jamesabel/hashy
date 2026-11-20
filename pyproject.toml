@@ -25,6 +25,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: Free Threading :: 2 - Beta",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
@@ -38,9 +39,9 @@ dev = [
     "pytest",
     "pytest-cov",
     "python-dotenv",
-    "psutil",
     "ruff",
     "ty",
+    "gilguard>=0.2.0 ; python_full_version >= '3.13'",
 ]
 
 [tool.hatch.version]
