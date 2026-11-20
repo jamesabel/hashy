@@ -6,7 +6,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/hashy?cacheSeconds=3600)](https://pypi.org/project/hashy/)
 [![Downloads](https://img.shields.io/pypi/dm/hashy.svg)](https://pypi.org/project/hashy/)
 [![License: MIT](https://img.shields.io/pypi/l/hashy.svg)](https://github.com/jamesabel/hashy/blob/master/LICENSE)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 Another hash library, but with a twist. It provides a simple interface to generate hashes for strings, files, dicts, 
 lists and sets. It also provides a decorator to cache the results of a function to disk and (optionally) memory.

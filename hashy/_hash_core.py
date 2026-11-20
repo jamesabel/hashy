@@ -8,7 +8,8 @@ logic so each public ``get_<thing>_<algorithm>`` function is a one-line wrapper
 that only has to specify *what* bytes to hash and *which* algorithm to use.
 """
 
-from typing import Callable, BinaryIO
+from collections.abc import Callable
+from typing import BinaryIO
 
 # Number of bytes read per chunk when streaming a file. Hashing a file in fixed
 # size chunks keeps memory use constant regardless of how large the file is.

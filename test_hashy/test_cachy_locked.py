@@ -19,6 +19,7 @@ import threading
 import time
 from datetime import timedelta
 from pathlib import Path
+from typing import Self
 
 import pytest
 
@@ -55,7 +56,7 @@ class _WriteLockHolder:
         finally:
             conn.close()
 
-    def __enter__(self) -> "_WriteLockHolder":
+    def __enter__(self) -> Self:
         self.thread.start()
         assert self.locked.wait(timeout=10.0), "lock holder did not acquire the write lock"
         return self
@@ -105,9 +106,8 @@ def test_store_gives_up_at_lock_timeout(monkeypatch, caplog):
     assert locked_timeout_func(1) == 2  # creates the file and its table before the lock is taken
     clear_counters()
 
-    with _WriteLockHolder(Path(cache_dir, "locked_timeout_func_cache.sqlite"), hold_s=2.0):
-        with caplog.at_level(logging.WARNING, logger="hashy.cache"):
-            assert locked_timeout_func(2) == 4  # the result is returned even though it could not be cached
+    with _WriteLockHolder(Path(cache_dir, "locked_timeout_func_cache.sqlite"), hold_s=2.0), caplog.at_level(logging.WARNING, logger="hashy.cache"):
+        assert locked_timeout_func(2) == 4  # the result is returned even though it could not be cached
 
     assert get_counters().cache_store_failed_counter == 1
     warnings = [record for record in caplog.records if record.levelno == logging.WARNING and "Result not cached" in record.getMessage()]

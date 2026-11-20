@@ -13,17 +13,23 @@ Public API is re-exported from `hashy/__init__.py`. Implementation is split by i
 
 ## Commands
 
-The `scripts/*.bat` files assume a `venv/` created via `scripts/make_venv_dev.bat` and `cd` up one level (run them from `scripts/`). Direct equivalents:
+The project is managed with `uv`; all packaging and tool configuration lives in `pyproject.toml` (hatchling build backend, version read from `hashy/__version__.py`) and dependencies are pinned in `uv.lock`. There is no `setup.py` or requirements file.
 
-- Run all tests: `pytest -s test_hashy` (matches CI)
-- Run a single test: `pytest -s test_hashy/test_cachy.py::test_cachy_simple`
-- Coverage (HTML report): `pytest --cov-report=html --cov` (config in `.coveragerc`)
-- Type check: `mypy -m hashy` and `mypy -m test_hashy` (config in `mypy.ini`)
-- Lint: `flake8 --ignore=E402,F401,W503,E203,E501 hashy`
-- Format: `black -l 192 hashy test_hashy setup.py` (line length 192, not default 88)
-- Build: `python -m build --wheel --no-isolation` (in the dev venv). Publish to PyPI: publish a GitHub release (or run the `Publish to PyPI` workflow); `.github/workflows/publish.yml` builds and uploads with Provenance through a PyPI trusted publisher. Never upload from a workstation, which cannot produce Provenance.
+- Set up / update the environment (`.venv`): `uv sync`
+- Run all tests: `uv run pytest -s test_hashy` (matches CI)
+- Run a single test: `uv run pytest -s test_hashy/test_cachy.py::test_cachy_simple`
+- Coverage (HTML report): `uv run pytest --cov-report=html --cov` (config in `[tool.coverage.run]`)
+- Type check: `uv run ty check` (checks `hashy` only, per `[tool.ty.src]`)
+- Lint: `uv run ruff check` (ruff's default rule set; `--fix` to apply fixes)
+- Format: `uv run ruff format` (line length 192, not default 88)
+- Add a dependency: `uv add <pkg>` (runtime) or `uv add --dev <pkg>`; commit the updated `uv.lock`
+- Build: `uv build`. Publish to PyPI: publish a GitHub release (or run the `Publish to PyPI` workflow); `.github/workflows/publish.yml` builds and uploads with Provenance through a PyPI trusted publisher. Never upload from a workstation, which cannot produce Provenance.
 
-CI (`.github/workflows/python-package.yml`) runs flake8 + `pytest -s test_hashy` on every released Python from the minimum supported (3.12, set by `msqlite`) through the latest stable release (3.15). The 3.16 pre-release is not in the matrix until `cffi` and `librt` ship cp316 wheels.
+CI (`.github/workflows/python-package.yml`) runs ruff (lint + format check), ty and `pytest -s test_hashy` on every released Python from the minimum supported (3.12, set by `msqlite`) through the latest stable release (3.15), plus the 3.16 pre-release.
+
+Human-owned test files are exempt from some ruff style rules and from formatting (see the `test_hashy/*` per-file-ignores and `[tool.ruff.format] exclude` in `pyproject.toml`) because AI tooling may not edit them.
+
+Inside the package, import from the defining submodule (`from .dls_hash import ...`), never from `hashy` itself: ruff sorts the imports in `hashy/__init__.py`, so nothing may depend on their order.
 
 ## Key design points
 
