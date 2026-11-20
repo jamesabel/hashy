@@ -1,11 +1,11 @@
-from collections import OrderedDict
-from enum import Enum
 import json
+from collections import OrderedDict
 from decimal import Decimal
+from enum import Enum
 
 import pytest
 
-from hashy import dls_sort, get_dls_md5, get_dls_sha256, get_dls_sha512, get_dls_crc64nvme, json_dumps
+from hashy import dls_sort, get_dls_crc64nvme, get_dls_md5, get_dls_sha256, get_dls_sha512, json_dumps
 
 
 def test_dl_sort():
@@ -48,7 +48,7 @@ def test_enum():
 
 def test_decimal():
     # doesn't work well for numbers not representable in float point, but integers and some floating point are OK
-    d = {"i": Decimal(2), "f": Decimal(1.5)}
+    d = {"i": Decimal(2), "f": Decimal("1.5")}
     assert json_dumps(dls_sort(d)) == '{"f":1.5,"i":2}'
 
 

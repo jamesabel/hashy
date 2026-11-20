@@ -7,14 +7,14 @@ the key between this process's check and its act). A real multiprocess hammer is
 timing-dependent, so it is only a cheap smoke test at the end.
 """
 
+import shutil
 import time
 from concurrent.futures import ProcessPoolExecutor
 from datetime import timedelta
 from pathlib import Path
-import shutil
 
 from hashy import cachy
-from hashy.cache import _CachyCache, CacheMetadata, clear_counters, get_counters
+from hashy.cache import CacheMetadata, _CachyCache, clear_counters, get_counters
 
 from .cache_directory import get_cache_directory
 
@@ -71,7 +71,7 @@ def _make_cache(name: str, **kwargs) -> _CachyCache:
     cache_dir = Path(get_cache_directory(), "expiry_race")
     cache_dir.mkdir(parents=True, exist_ok=True)
     Path(cache_dir, f"{name}_cache.sqlite").unlink(missing_ok=True)
-    defaults = dict(cache_life=timedelta(seconds=0), cache_none=False, in_memory=True, max_cache_size=None)
+    defaults = {"cache_life": timedelta(seconds=0), "cache_none": False, "in_memory": True, "max_cache_size": None}
     defaults.update(kwargs)
     return _CachyCache(func, cache_dir, **defaults)
 

@@ -1,6 +1,6 @@
-from pathlib import Path
-from datetime import timedelta, datetime
 import shutil
+from datetime import datetime, timedelta
+from pathlib import Path
 from threading import Thread
 
 from psutil import cpu_count
@@ -22,7 +22,6 @@ def _function(x):
 
 
 class TestThread(Thread):
-
     def __init__(self, x):
         super().__init__()
         self.x = x
@@ -50,7 +49,6 @@ def test_cachy_concurrency():
     count = 0
 
     while (datetime.now() - start) < duration:
-
         while len(threads) < concurrency:
             thread = TestThread(count)
             threads[count] = thread

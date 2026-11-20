@@ -1,12 +1,11 @@
-import time
-from pathlib import Path
-from datetime import timedelta
-from pprint import pformat
-from typing import List
 import math
+import time
+from datetime import timedelta
+from pathlib import Path
+from pprint import pformat
 
 from hashy import cachy
-from hashy.cache import get_cache_dir, CacheCounters, clear_counters, get_counters
+from hashy.cache import CacheCounters, clear_counters, get_cache_dir, get_counters
 
 from .cache_directory import get_cache_directory
 
@@ -291,11 +290,11 @@ def test_cachy_different_values():
 def test_cachy_big_data():
 
     @cachy(cache_life, get_cache_directory())
-    def big_to_little(a: List[int]) -> int:
+    def big_to_little(a: list[int]) -> int:
         return len(a)
 
     @cachy(cache_life, get_cache_directory())
-    def little_to_big(a: int) -> List[int]:
+    def little_to_big(a: int) -> list[int]:
         return [v for v in range(a)]
 
     clear_counters()

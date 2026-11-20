@@ -1,7 +1,6 @@
-from pathlib import Path
-from datetime import timedelta
 import os
-
+from datetime import timedelta
+from pathlib import Path
 
 from hashy import cachy
 from hashy.cache import clear_counters, get_counters
@@ -47,7 +46,6 @@ def test_cachy_in_memory_do_not_cache_none():
     @cachy(cache_dir=cache_directory, in_memory=True)
     def func_none_in_memory(p):
         calls.append(p)
-        return None
 
     clear_counters()
     assert func_none_in_memory(1) is None  # miss
@@ -67,7 +65,6 @@ def test_cachy_in_memory_cache_none_when_enabled():
     @cachy(cache_dir=cache_directory, cache_none=True, in_memory=True)
     def func_none_in_memory_cached(p):
         calls.append(p)
-        return None
 
     clear_counters()
     assert func_none_in_memory_cached(1) is None  # miss -> stored in file + in-memory caches

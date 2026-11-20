@@ -1,5 +1,5 @@
 from hashy import cachy
-from hashy.cache import get_counters, clear_counters
+from hashy.cache import clear_counters, get_counters
 
 from .cache_directory import get_cache_directory
 

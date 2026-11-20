@@ -57,12 +57,6 @@ line-length = 192
 
 [tool.ruff.lint.per-file-ignores]
 "hashy/__init__.py" = ["F401"]  # re-exports the public API
-# Style findings in human-owned tests, which AI tooling may not edit. To clear them, delete this entry and the
-# [tool.ruff.format] exclude below, then run `uv run ruff check --fix --unsafe-fixes test_hashy` and `uv run ruff format`.
-"test_hashy/*" = ["I001", "UP006", "UP035", "C408", "RET501", "PLR1711", "RUF032"]
-
-[tool.ruff.format]
-exclude = ["test_hashy/test_cachy_concurrency.py", "test_hashy/test_cachy_default_arguments.py"]
 
 [tool.ty.src]
 # the library only, as mypy was run; the tests use duck-typed fakes and the examples include deliberately wrong code

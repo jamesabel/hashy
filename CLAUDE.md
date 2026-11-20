@@ -27,8 +27,6 @@ The project is managed with `uv`; all packaging and tool configuration lives in 
 
 CI (`.github/workflows/python-package.yml`) runs ruff (lint + format check), ty and `pytest -s test_hashy` on every released Python from the minimum supported (3.12, set by `msqlite`) through the latest stable release (3.15), plus the 3.16 pre-release.
 
-Human-owned test files are exempt from some ruff style rules and from formatting (see the `test_hashy/*` per-file-ignores and `[tool.ruff.format] exclude` in `pyproject.toml`) because AI tooling may not edit them.
-
 Inside the package, import from the defining submodule (`from .dls_hash import ...`), never from `hashy` itself: ruff sorts the imports in `hashy/__init__.py`, so nothing may depend on their order.
 
 ## Key design points

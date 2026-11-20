@@ -1,8 +1,7 @@
 import shutil
 
-from dotenv import load_dotenv, find_dotenv
-
 import pytest
+from dotenv import find_dotenv, load_dotenv
 
 from .test_cachy import get_cache_directory
 
