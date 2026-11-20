@@ -39,7 +39,6 @@ dev = [
     "pytest",
     "pytest-cov",
     "python-dotenv",
-    "psutil",
     "ruff",
     "ty",
     "gilguard>=0.2.0 ; python_full_version >= '3.13'",

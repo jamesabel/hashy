@@ -25,7 +25,7 @@ The project is managed with `uv`; all packaging and tool configuration lives in 
 - Add a dependency: `uv add <pkg>` (runtime) or `uv add --dev <pkg>`; commit the updated `uv.lock`
 - Build: `uv build`. Publish to PyPI: publish a GitHub release (or run the `Publish to PyPI` workflow); `.github/workflows/publish.yml` builds and uploads with Provenance through a PyPI trusted publisher. Never upload from a workstation, which cannot produce Provenance.
 
-CI (`.github/workflows/python-package.yml`) runs ruff (lint + format check), ty and `pytest -s test_hashy` on every released Python from the minimum supported (3.12, set by `msqlite`) through the latest stable release (3.15), plus the 3.16 pre-release and free-threaded 3.14t. 3.15t is not in the matrix until `psutil` ships a cp315t wheel.
+CI (`.github/workflows/python-package.yml`) runs ruff (lint + format check), ty and `pytest -s test_hashy` on every released Python from the minimum supported (3.12, set by `msqlite`) through the latest stable release (3.15), plus the 3.16 pre-release and free-threaded 3.14t and 3.15t.
 
 **Free-threaded Python.** hashy supports it. On a free-threaded build the top-level `conftest.py` imports `gilguard` (a dev dependency), which fails the test run if any import re-enables the GIL; CI also runs `python -m gilguard` there. gilguard raises on a GIL build, so it is never imported on one. To test locally: `uv run --python 3.14t pytest test_hashy` (use a separate `UV_PROJECT_ENVIRONMENT` to keep `.venv` as it is). In-process shared state must stay safe without the GIL: update counters only through `CacheCounters.increment()` (locked; `+=` loses counts), and read the in-memory cache with a single lookup, never check-then-read.
 

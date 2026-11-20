@@ -34,7 +34,7 @@ which retries SQLite's `database is locked` errors with jittered backoff. A stor
 30 seconds (`hashy.cache.LOCK_TIMEOUT_S`) is logged as a warning and counted in `get_counters().cache_store_failed_counter`;
 the caller always receives the computed result.
 
-Requires Python 3.12 or later. Free-threaded Python is supported and tested (3.14t): hashy and its dependencies
+Requires Python 3.12 or later. Free-threaded Python is supported and tested (3.14t and 3.15t): hashy and its dependencies
 run with the GIL off, and `cachy` and its counters are safe to use from threads running in parallel.
 
 ## cachy

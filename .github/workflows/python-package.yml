@@ -22,9 +22,8 @@ jobs:
         # Policy: every released version from the minimum supported (3.12, set by msqlite) through the
         # latest stable release (3.15), plus the upcoming pre-release (3.16). Every dependency in uv.lock
         # installs from a wheel on all of them. Move the matrix along as new Pythons are released.
-        # Free-threaded: 3.14t. 3.15t waits for psutil (a dev dependency) to ship a cp315t wheel; its sdist needs
-        # a C compiler, so it is not built from source.
-        python-version: ["3.12", "3.13", "3.14", "3.15", "3.16", "3.14t"]
+        # Free-threaded: every released free-threaded build that is officially supported (3.14t, 3.15t).
+        python-version: ["3.12", "3.13", "3.14", "3.15", "3.16", "3.14t", "3.15t"]
 
     steps:
     - uses: actions/checkout@v7

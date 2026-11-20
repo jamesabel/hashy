@@ -1,9 +1,8 @@
+import os
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Thread
-
-from psutil import cpu_count
 
 from hashy import cachy
 from hashy.cache import get_counters
@@ -40,7 +39,7 @@ def test_cachy_concurrency():
     shutil.rmtree(temp_dir, ignore_errors=True)
     temp_dir.mkdir(parents=True, exist_ok=True)
 
-    concurrency = 100 * cpu_count()
+    concurrency = 100 * os.cpu_count()
     print(f"{duration=},{concurrency=}")
 
     threads = {}
