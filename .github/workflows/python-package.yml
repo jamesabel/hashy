@@ -13,6 +13,9 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+      UV_PYTHON_PREFERENCE: only-system
     strategy:
       fail-fast: false
       matrix:
@@ -23,10 +26,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v7
-    - name: Install uv and Python ${{ matrix.python-version }}
-      uses: astral-sh/setup-uv@v10.3.3  # setup-uv publishes no floating major tag
+    # The interpreter comes from actions/setup-python, not from uv: the multiprocessing tests need
+    # multiprocessing.synchronize, which uv's managed Python lacks on the GitHub runner.
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
+        allow-prereleases: true
+    - name: Install uv
+      uses: astral-sh/setup-uv@v10.3.3  # setup-uv publishes no floating major tag
+      with:
         enable-cache: true
     - name: Install dependencies
       run: uv sync --locked
