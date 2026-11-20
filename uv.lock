@@ -1,6 +1,10 @@
 version = 1
 revision = 5
 requires-python = ">=3.12"
+resolution-markers = [
+    "python_full_version >= '3.13'",
+    "python_full_version < '3.13'",
+]
 
 [[package]]
 name = "colorama"
@@ -123,6 +127,15 @@ wheels = [
 ]
 
 [[package]]
+name = "gilguard"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a2/63/e164067a2d1d69e61e75aaf3b549e3c83202d9836b35fab41645905a5209/gilguard-0.2.0.tar.gz", hash = "sha256:eefdcd41e89d224b51ec05be9a55559e8b05f4b0e189f3dc29580509bcb306d2", size = 12213, upload-time = "2026-11-06T06:11:19.522Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/18/fb/a76ae5208f2c8f354215d92619d6fe9113507d13acde022c626077f296f5/gilguard-0.2.0-py3-none-any.whl", hash = "sha256:4c71e87209a28f2daa6265fb5ad99003df25f9b0f7fe1036a22d908fc09341b7", size = 13553, upload-time = "2026-11-06T06:11:18.277Z" },
+]
+
+[[package]]
 name = "hashy"
 source = { editable = "." }
 dependencies = [
@@ -132,6 +145,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "gilguard", marker = "python_full_version >= '3.13'" },
     { name = "psutil" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -148,6 +162,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "gilguard", marker = "python_full_version >= '3.13'", specifier = ">=0.2.0" },
     { name = "psutil" },
     { name = "pytest" },
     { name = "pytest-cov" },

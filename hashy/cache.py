@@ -24,6 +24,7 @@ import inspect
 import lzma
 import pickle
 import sqlite3
+import threading
 import time
 from collections.abc import Callable
 from datetime import timedelta
@@ -79,6 +80,18 @@ class CacheCounters:
         self.cache_expired_counter = cache_expired_counter
         self.cache_eviction_counter = cache_eviction_counter
         self.cache_store_failed_counter = cache_store_failed_counter
+        self._lock = threading.Lock()
+
+    def increment(self, *counter_names: str) -> None:
+        """
+        Add one to each named counter.
+
+        Locked, because ``+=`` on an attribute is a read followed by a write: threads counting at the same time
+        (which free-threaded Python runs truly in parallel) would otherwise lose counts.
+        """
+        with self._lock:
+            for counter_name in counter_names:
+                setattr(self, counter_name, getattr(self, counter_name) + 1)
 
     def __repr__(self):
         values = [
@@ -102,12 +115,13 @@ class CacheCounters:
         )
 
     def clear(self):
-        self.cache_memory_hit_counter = 0
-        self.cache_hit_counter = 0
-        self.cache_miss_counter = 0
-        self.cache_expired_counter = 0
-        self.cache_eviction_counter = 0
-        self.cache_store_failed_counter = 0
+        with self._lock:
+            self.cache_memory_hit_counter = 0
+            self.cache_hit_counter = 0
+            self.cache_miss_counter = 0
+            self.cache_expired_counter = 0
+            self.cache_eviction_counter = 0
+            self.cache_store_failed_counter = 0
 
 
 _cache_counters = CacheCounters()
@@ -523,7 +537,7 @@ class _CachyCache:
         except KeyError:
             pass  # another process expired this entry first
         else:
-            _cache_counters.cache_expired_counter += 1
+            _cache_counters.increment("cache_expired_counter")
         with self._payload_db() as db:
             try:
                 del db[key]
@@ -543,16 +557,19 @@ class _CachyCache:
             or :data:`_MISS` when in-memory caching is off, the key is absent, or
             the stored entry is unreadable (in which case it is discarded).
         """
-        if not (self.in_memory and key in self.in_memory_cache):
+        if not self.in_memory:
+            return _MISS
+        # One lookup rather than `key in cache` followed by `cache[key]`: another thread can evict the entry in between.
+        payload = self.in_memory_cache.get(key)
+        if payload is None:
             return _MISS
         try:
-            result = cachy_decompress(self.in_memory_cache[key])
+            result = cachy_decompress(payload)
         except CacheReadError as e:
             log.warning(f'Discarding unreadable in-memory cache entry for "{self.function_name}": {e}')
             self.in_memory_cache.pop(key, None)
             return _MISS
-        _cache_counters.cache_memory_hit_counter += 1
-        _cache_counters.cache_hit_counter += 1
+        _cache_counters.increment("cache_memory_hit_counter", "cache_hit_counter")
         return result
 
     def _read_file_or_compute(self, key: str, args: tuple, kwargs: dict) -> tuple:
@@ -578,7 +595,7 @@ class _CachyCache:
             if payload is not _MISS:
                 try:
                     result = cachy_decompress(payload)
-                    _cache_counters.cache_hit_counter += 1
+                    _cache_counters.increment("cache_hit_counter")
                     return result, False
                 except CacheReadError as e:
                     # unreadable entry (transient OOM, corruption, or a class that moved/changed) -> drop it, treat as miss
@@ -586,7 +603,7 @@ class _CachyCache:
                     self._discard_payload(db, key)
 
             # miss (genuine, just-discarded bad entry, or expired by another process) - recompute
-            _cache_counters.cache_miss_counter += 1
+            _cache_counters.increment("cache_miss_counter")
             result = self.func(*args, **kwargs)
             stored = self._store(db, key, result)
             return result, stored
@@ -620,7 +637,7 @@ class _CachyCache:
         try:
             db[key] = cached_result
         except MSQLiteTimeoutError as e:
-            _cache_counters.cache_store_failed_counter += 1
+            _cache_counters.increment("cache_store_failed_counter")
             log.warning(self._lock_timeout_note("Result not cached", key, e))
             return False
         if self.in_memory:
@@ -685,7 +702,7 @@ class _CachyCache:
                     del self.in_memory_cache[oldest_key]
                 except KeyError:
                     log.info(f'Key "{oldest_key}" not found in in-memory cache for "{self.function_name}". This is unexpected.')
-            _cache_counters.cache_eviction_counter += 1
+            _cache_counters.increment("cache_eviction_counter")
 
     @staticmethod
     def _find_oldest(metadata_db: CachyDBDict) -> str | None:

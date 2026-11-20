@@ -22,7 +22,9 @@ jobs:
         # Policy: every released version from the minimum supported (3.12, set by msqlite) through the
         # latest stable release (3.15), plus the upcoming pre-release (3.16). Every dependency in uv.lock
         # installs from a wheel on all of them. Move the matrix along as new Pythons are released.
-        python-version: ["3.12", "3.13", "3.14", "3.15", "3.16"]
+        # Free-threaded: 3.14t. 3.15t waits for psutil (a dev dependency) to ship a cp315t wheel; its sdist needs
+        # a C compiler, so it is not built from source.
+        python-version: ["3.12", "3.13", "3.14", "3.15", "3.16", "3.14t"]
 
     steps:
     - uses: actions/checkout@v7
@@ -48,6 +50,12 @@ jobs:
     - name: Type check with ty
       run: uv run ty check
 
+    - name: Check that no installed package re-enables the GIL
+      if: endsWith(matrix.python-version, 't')
+      run: uv run python -m gilguard
+
+    # On a free-threaded build the top-level conftest.py imports gilguard, which fails the run if an import
+    # re-enables the GIL.
     - name: Test with pytest
       run: uv run pytest -s --cov --cov-report=xml test_hashy
 
